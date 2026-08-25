@@ -32,20 +32,20 @@ void Main() {
 the browser backend lands with the DOM primitives):
 
 ```z42
-using Zaia.Renderer;
+using Zaia.Ui;
 using Zaia.App;
 
 class Counter : Component {
-    int _count = 0;
+    State<int> _count = new State<int>(0);
     override VNode Render() =>
         H.Div(
-            H.H1("Count: " + _count.ToString()),
-            H.Button("Increment").OnClick(() => { _count = _count + 1; StateChanged(); })
+            H.H1("Count: " + _count.Get().ToString()),
+            H.Button("Increment").OnClick(() => _count.Set(_count.Get() + 1))
         );
 }
 
 void Main() { App.Mount("#app", new Counter()); }              // client (needs DOM primitives)
-// server-side rendering, today:
+// server-side rendering, today (using Zaia.Renderer):
 //   var b = new HtmlBackend(); new Renderer(b).Mount("#app", new Counter());
 //   Console.WriteLine(b.ToHtml(0));   // <div><h1>Count: 0</h1><button>Increment</button></div>
 ```
@@ -58,13 +58,15 @@ DTO field and both ends fail to compile *together*, not at runtime.
 | Package | Role | Status |
 |---------|------|--------|
 | [`zaia.core`](packages/zaia.core) | platform-agnostic kernel: routing, result, DI | 🟢 |
-| [`zaia.renderer`](packages/zaia.renderer) | components, VNode, the `RenderBackend` seam + reconciler, `HtmlBackend` (SSR) | 🟢 |
+| [`zaia.ui`](packages/zaia.ui) | **describe** — `Component`, `VNode`, `H`, `State<T>` (data updates) | 🟢 |
+| [`zaia.renderer`](packages/zaia.renderer) | **render** — `RenderBackend` seam + reconciler + `HtmlBackend` (SSR) | 🟢 |
 | [`zaia.web`](packages/zaia.web) | `DomBackend` — the browser render backend | 🟢 builds; runs when DOM primitives land |
-| [`zaia.app`](packages/zaia.app) | `App.Mount` — the client application host | 🟢 |
+| [`zaia.app`](packages/zaia.app) | **assemble** — `App.Mount`: backend + change→render loop | 🟢 |
 | [`zaia.server`](packages/zaia.server) | `WebApp`, router, middleware, request context | 🟢 |
 | [`zaia.shared`](packages/zaia.shared) | end-to-end API contracts + typed client calls | 🟢 |
 
-Design docs: [ARCHITECTURE.md](ARCHITECTURE.md) · [docs/rendering.md](docs/rendering.md) · [docs/app-host.md](docs/app-host.md) · [docs/dom-interop.md](docs/dom-interop.md).
+The client is three layers — **describe** (`ui`) → **render** (`renderer`) → **assemble** (`app`).
+Design docs: [ARCHITECTURE.md](ARCHITECTURE.md) · [docs/description.md](docs/description.md) · [docs/rendering.md](docs/rendering.md) · [docs/app-host.md](docs/app-host.md) · [docs/dom-interop.md](docs/dom-interop.md).
 
 ## Getting started
 

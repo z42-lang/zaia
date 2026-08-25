@@ -1,20 +1,34 @@
-// App — the client application host / composition root. It wires a concrete
-// backend (the browser DomBackend) into the renderer and mounts a root component,
-// then leaves the VM resident so DOM events re-enter z42.
+// App — the client application host / composition root. This is the "assembly"
+// layer: it picks a concrete backend, wires the reactive loop (a data change in
+// the description → a re-render through the renderer), and owns process lifetime.
 //
-// This is the "app" abstraction: the single entry point a client program calls.
-// The server's application object is `Zaia.Server.WebApp` — the two hosts mirror
-// each other across the stack.
+// The three layers meet here and nowhere else:
+//   zaia.ui        describes  (Component / VNode / State — fires UiDispatch)
+//   zaia.renderer  renders    (Renderer over a RenderBackend)
+//   zaia.app       assembles  (backend choice + change→render loop + lifecycle)
 namespace Zaia.App;
 
 using Std;
+using Zaia.Ui;
 using Zaia.Renderer;
 using Zaia.Web;
 
+// Forwards description-change signals to the renderer. The only thing that knows
+// both the UiDispatch seam and the concrete Renderer — i.e. the assembly point.
+class RenderTrigger : ChangeListener {
+    private Renderer _renderer;
+    public RenderTrigger(Renderer renderer) { this._renderer = renderer; }
+    public override void OnChanged() { this._renderer.Rerender(); }
+}
+
 public static class App {
-    // Mount `root` under the CSS selector and start rendering in the browser.
+    // Mount `root` under the selector in the browser and start the resident loop.
     public static void Mount(string selector, Component root) {
         Renderer r = new Renderer(new DomBackend());
+
+        // Assemble the reactive loop: description signals a change → renderer re-renders.
+        UiDispatch.Listener = new RenderTrigger(r);
+
         r.Mount(selector, root);
     }
 }

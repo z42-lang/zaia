@@ -1,19 +1,18 @@
 # Rendering (`zaia.renderer`)
 
-The rendering layer separates **what** a UI is from **where** it goes. A `Component`
-produces an immutable `VNode` tree; a `Renderer` reconciles that tree against a
-`RenderBackend`. The renderer never mentions the DOM — so one reconciler drives the
-browser, a server-side HTML string, or a test harness.
+The rendering layer takes a **description** (a `Component`'s `VNode` tree, from
+[`zaia.ui`](description.md)) and materializes it through a `RenderBackend`. It renders;
+it does not describe data or assemble the reactive loop. Because it targets the backend
+seam and never the DOM, one reconciler drives the browser, a server-side HTML string, or
+a test harness.
 
 ## Pieces
 
 | Type | Role |
 |------|------|
-| `VNode` | Immutable virtual node: `Tag`, `Text`, `Children`, `OnClickHandler`. `Tag == ""` is a text node. |
-| `H` | Element factory — `H.Div(H.H1("hi"), H.Button("go"))` reads like the markup it builds. |
-| `Component` | Base class; override `Render() -> VNode`. `StateChanged()` schedules a re-render. |
 | `RenderBackend` | The seam. Abstract ops on opaque **int node handles**: `Root`, `CreateElement`, `CreateText`, `SetText`, `AppendChild`, `OnClick`. |
-| `Renderer` | Backend-agnostic reconciler: renders the root component to a `VNode` tree and materializes it through a backend. |
+| `Renderer` | Backend-agnostic reconciler: renders the root `Component` to a `VNode` tree (from `zaia.ui`) and materializes it through a backend. `Rerender()` rebuilds after a change. |
+| `HtmlBackend` | A backend that produces an HTML string — SSR, and proof the reconciler needs no DOM. |
 
 ## The seam
 

@@ -1,20 +1,16 @@
-// Renderer — the backend-agnostic reconciler. It renders a root Component to a
-// VNode tree and materializes it through a RenderBackend. Because it targets the
-// RenderBackend seam (never the DOM directly), the same reconciler drives the
-// browser, server-side HTML, or a test harness.
+// Renderer — pure rendering. It takes a UI description (a Component's VNode tree,
+// from zaia.ui) and materializes it through a RenderBackend. It knows nothing about
+// data updates or event wiring — the app drives it via Schedule().
 //
-// PoC scope: a full (re)build on each render. Tree diffing / keyed patching is a
-// future optimization — the API here does not change when it lands.
+// PoC scope: a full (re)build on each render. Keyed tree-diffing is a drop-in
+// optimization that does not change this API.
 namespace Zaia.Renderer;
 
 using Std;
 using Std.Collections;
+using Zaia.Ui;
 
 public class Renderer {
-    // The renderer currently driving the UI, so Component.StateChanged() can reach
-    // it without every component holding a back-reference.
-    public static Renderer Active;
-
     private RenderBackend _backend;
     private int _rootHandle;
     private Component _root;
@@ -24,12 +20,12 @@ public class Renderer {
     public void Mount(string selector, Component root) {
         this._rootHandle = this._backend.Root(selector);
         this._root = root;
-        Renderer.Active = this;
         this._render();
     }
 
-    // Re-render after a state change. PoC: rebuild the whole subtree.
-    public void Schedule(Component c) { this._render(); }
+    // Re-render the mounted tree. The app subscribes to zaia.ui's UiDispatch and
+    // forwards here when the description signals a data change.
+    public void Rerender() { this._render(); }
 
     private void _render() {
         VNode tree = this._root.Render();

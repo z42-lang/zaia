@@ -1,10 +1,7 @@
 [project]
-name = "zaia.renderer"
+name = "zaia.ui"
 version = "0.1.0"
 kind = "lib"
 
 [sources]
 include = ["src/**/*.z42"]
-
-[dependencies]
-"zaia.ui" = "0.1.0"

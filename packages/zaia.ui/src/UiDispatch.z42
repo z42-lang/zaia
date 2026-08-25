@@ -1,0 +1,26 @@
+// UiDispatch — the change-signal seam between description and assembly.
+//
+// The description layer fires `NotifyChanged` when data updates. It does NOT know
+// who listens — the app layer registers a `ChangeListener` and assembles the
+// "change → re-render" loop. This keeps the description layer pure: it only
+// *describes* that something changed, never *how* the screen is updated.
+//
+// The seam is a nominal `ChangeListener` (not a delegate) because a named class
+// crosses zpkg boundaries cleanly, whereas a structural func type does not.
+namespace Zaia.Ui;
+
+using Std;
+
+public abstract class ChangeListener {
+    public abstract void OnChanged();
+}
+
+public static class UiDispatch {
+    // Registered by the app host during composition.
+    public static ChangeListener Listener;
+
+    public static void NotifyChanged(Component c) {
+        ChangeListener l = UiDispatch.Listener;
+        if (l != null) { l.OnChanged(); }
+    }
+}

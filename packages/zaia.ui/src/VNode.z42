@@ -1,6 +1,6 @@
-// VNode — an immutable virtual node. The renderer walks a tree of these and drives
-// a RenderBackend to produce output (real DOM, an HTML string, …).
-namespace Zaia.Renderer;
+// VNode — an immutable description of a UI node. Pure data: no rendering, no DOM.
+// The renderer consumes a tree of these; a backend materializes them.
+namespace Zaia.Ui;
 
 using Std;
 using Std.Collections;
@@ -9,7 +9,7 @@ public class VNode {
     public string Tag;             // "div" / "button" / … ; "" for a bare text node
     public string Text;            // text content for text / leaf nodes
     public List<VNode> Children;
-    public Action OnClickHandler;  // non-capturing click handler (PoC constraint)
+    public Action OnClickHandler;  // declared handler (the app assembles the response)
 
     public VNode(string tag) {
         this.Tag = tag;

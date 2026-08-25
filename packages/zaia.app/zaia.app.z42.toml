@@ -7,5 +7,6 @@ kind = "lib"
 include = ["src/**/*.z42"]
 
 [dependencies]
+"zaia.ui"       = "0.1.0"
 "zaia.renderer" = "0.1.0"
 "zaia.web"      = "0.1.0"

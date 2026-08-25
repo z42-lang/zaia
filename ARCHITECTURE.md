@@ -28,50 +28,63 @@ Deeper design notes live in [`docs/`](docs/): [rendering](docs/rendering.md) ·
 Six packages, strict dependency direction (arrows point to dependencies):
 
 ```
-                        ┌───────────────┐
-                        │   zaia.core   │   kernel: routing, result, DI
-                        └───┬───────┬───┘   (no net, no DOM)
-              ┌─────────────┘       └──────────────┬───────────────┐
-   ┌──────────▼─────────┐              ┌────────────▼────┐  ┌───────▼────────┐
-   │   zaia.renderer    │              │   zaia.server   │  │  zaia.shared   │
-   │ VNode · Component  │              │ WebApp · Router │  │  ApiContract   │
-   │ RenderBackend ·    │              │ Middleware · Ctx│  │  (server⇄client│
-   │ Renderer · Html    │              │ → z42.net.Http  │  │   contracts)   │
-   │ Backend (SSR)      │              │ → z42.json      │  │  → z42.json    │
-   └───────┬────────────┘              └─────────────────┘  └────────────────┘
-     ┌─────▼──────────┐
-     │   zaia.web     │  DomBackend : RenderBackend  → VM __dom_* builtins
-     └─────┬──────────┘
-     ┌─────▼──────────┐
-     │   zaia.app     │  App.Mount — client host: wires DomBackend into Renderer
-     └────────────────┘
+  CLIENT (describe → render → assemble)          SERVER / SHARED
+
+  ┌────────────────────┐                     ┌───────────────┐
+  │      zaia.ui       │  describe           │   zaia.core   │  routing/result/DI
+  │ Component · VNode  │                     └───┬───────┬───┘
+  │ H · State · UiDisp │                    ┌────┘       └────┐
+  └─────────┬──────────┘             ┌──────▼────────┐ ┌──────▼───────┐
+  ┌─────────▼──────────┐             │  zaia.server  │ │ zaia.shared  │
+  │   zaia.renderer    │  render     │ WebApp·Router │ │ ApiContract  │
+  │ RenderBackend ·    │             │ Middleware    │ │ (server⇄     │
+  │ Renderer · Html    │             │ → z42.net.Http│ │  client)     │
+  │ Backend (SSR)      │             │ → z42.json    │ │ → z42.json   │
+  └─────────┬──────────┘             └───────────────┘ └──────────────┘
+  ┌─────────▼──────────┐
+  │     zaia.web       │  DomBackend : RenderBackend → VM __dom_* builtins
+  └─────────┬──────────┘
+  ┌─────────▼──────────┐
+  │     zaia.app       │  assemble — App.Mount: backend + change→render loop + lifecycle
+  └────────────────────┘
 ```
 
 | Package | Runs on | Depends on | Status |
 |---------|---------|-----------|--------|
 | `zaia.core` | any | — | 🟢 builds |
-| `zaia.renderer` | any | — | 🟢 builds (incl. a working `HtmlBackend`) |
+| `zaia.ui` | any | — | 🟢 builds |
+| `zaia.renderer` | any | `zaia.ui` | 🟢 builds (incl. a working `HtmlBackend`) |
 | `zaia.web` | wasm | `zaia.renderer`, **VM DOM builtins** | 🟢 builds; `DomBackend` stubbed until primitives land |
-| `zaia.app` | wasm / client | `zaia.renderer`, `zaia.web` | 🟢 builds |
+| `zaia.app` | wasm / client | `zaia.ui`, `zaia.renderer`, `zaia.web` | 🟢 builds |
 | `zaia.server` | native | `zaia.core`, `z42.net`, `z42.json` | 🟢 builds |
 | `zaia.shared` | any | `zaia.core`, `z42.json` | 🟢 builds |
 
-All six compile today with the **nightly** z42 SDK. The only thing not yet *runnable* on
+All seven compile today with the **nightly** z42 SDK. The only thing not yet *runnable* on
 the client is the DOM output — the `DomBackend` throws until the VM DOM primitives ship
-(the reconciler above it, and the `HtmlBackend`, run today). See
+(the description, the reconciler, and the `HtmlBackend` all run today). See
 [docs/dom-interop.md](docs/dom-interop.md).
 
-### The two new abstractions: renderer and app
+### The client is three layers: describe → render → assemble
 
-- **`zaia.renderer`** separates *what* a UI is (a `Component` producing a `VNode` tree)
-  from *where* it goes (a `RenderBackend`). The `Renderer` reconciles the tree against a
-  backend and never mentions the DOM. Two backends exist: `HtmlBackend` (a string — SSR,
-  runs today) and, in `zaia.web`, `DomBackend` (the live browser DOM). A test backend is
-  trivial to add. Full design: [docs/rendering.md](docs/rendering.md).
-- **`zaia.app`** is the client application host — the composition root a browser program
-  calls. `App.Mount("#app", root)` wires a `DomBackend` into a `Renderer` and starts the
-  resident render loop. It mirrors the server's `WebApp` host on the other side of the
-  stack. Full design: [docs/app-host.md](docs/app-host.md).
+The client stack is split by a single question — *whose job is this?*
+
+- **`zaia.ui` — describe.** `Component` (override `Render() -> VNode`), the `H` element
+  factory, and `State<T>`, the data-update primitive: mutate a `State` and it fires a
+  change signal through `UiDispatch`. This layer **only describes** the UI and how data
+  updates; it has no renderer, no DOM, and no idea what happens when data changes.
+  Full design: [docs/description.md](docs/description.md).
+- **`zaia.renderer` — render.** The `RenderBackend` seam + the `Renderer` reconciler +
+  `HtmlBackend`. It takes a description's `VNode` tree and materializes it through a
+  backend. It renders; it does not assemble or react. Full design:
+  [docs/rendering.md](docs/rendering.md).
+- **`zaia.app` — assemble.** The composition root. `App.Mount("#app", root)` picks a
+  backend (`DomBackend`), wires the reactive loop (registers a `ChangeListener` on
+  `UiDispatch` that re-renders), and owns process lifetime. It's the only place that knows
+  all three layers. Full design: [docs/app-host.md](docs/app-host.md).
+
+The seam between describe and assemble is a nominal `ChangeListener` (registered on
+`UiDispatch`), not a delegate — so the description signals a change without ever importing
+the renderer, and a named class crosses the zpkg boundary cleanly.
 
 ## Server — the shape
 
@@ -96,20 +109,21 @@ Blazor-like components; `Render()` returns a VNode tree the renderer materialize
 a backend:
 
 ```z42
-using Zaia.Renderer;
+using Zaia.Ui;
 using Zaia.App;
 
 class Counter : Component {
-    int _count = 0;
+    State<int> _count = new State<int>(0);              // data-update primitive
     override VNode Render() =>
         H.Div(
-            H.H1("Count: " + _count.ToString()),
-            H.Button("Increment").OnClick(() => { _count = _count + 1; StateChanged(); })
+            H.H1("Count: " + _count.Get().ToString()),
+            H.Button("Increment").OnClick(() => _count.Set(_count.Get() + 1))
         );
 }
 
 void Main() { App.Mount("#app", new Counter()); }   // client
-// — or, server-side rendering, today:
+// — or, server-side rendering, today (no DOM primitives needed):
+//   using Zaia.Renderer;
 //   var b = new HtmlBackend(); new Renderer(b).Mount("#app", new Counter());
 //   Console.WriteLine(b.ToHtml(0));   // → "<div><h1>Count: 0</h1><button>Increment</button></div>"
 ```
@@ -125,14 +139,15 @@ Rename a DTO field and both ends fail to compile together, not at runtime.
 zaia/
   packages/
     zaia.core/      routing, result, DI
-    zaia.renderer/  VNode, Component, H, RenderBackend, Renderer, HtmlBackend
+    zaia.ui/        Component, VNode, H, State, UiDispatch  (describe)
+    zaia.renderer/  RenderBackend, Renderer, HtmlBackend    (render)
     zaia.web/       DomBackend (→ VM DOM builtins)
-    zaia.app/       App.Mount (client host)
+    zaia.app/       App.Mount — backend + change→render loop (assemble)
     zaia.server/    WebApp, Router, Middleware, RequestContext
     zaia.shared/    ApiContract
     z42.workspace.toml
   examples/         hello-server (server) · counter-web (client)
-  docs/             rendering.md · app-host.md · dom-interop.md
+  docs/             description.md · rendering.md · app-host.md · dom-interop.md
   scripts/build.sh
   ARCHITECTURE.md
 ```

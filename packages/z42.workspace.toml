@@ -9,9 +9,10 @@ members = ["*"]
 output_dir = "dist"
 
 # Dependency order (z42c also topo-sorts):
-#   core → renderer → web → app ; core → shared ; core → server
+#   ui → renderer → web → app ; core → shared ; core → server
 default-members = [
     "zaia.core",
+    "zaia.ui",
     "zaia.renderer",
     "zaia.web",
     "zaia.app",
