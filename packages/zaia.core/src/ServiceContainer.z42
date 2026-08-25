@@ -1,0 +1,54 @@
+// ServiceContainer — the dependency-injection seam. A minimal service locator:
+// register singletons, resolve them by type. The app host owns one and hands
+// components / handlers what they ask for, so code never reaches for globals.
+//
+//   var svc = new ServiceContainer();
+//   svc.Register(new UserStore());          // keyed by its runtime type
+//   UserStore s = svc.Resolve<UserStore>(); // or svc.Get(typeof(UserStore))
+//
+// Keying is by the instance's runtime type FullName (reflection MVP). The generic
+// Resolve<T>() is convenience sugar over Get(typeof(T)); prefer Get(Type) at call
+// sites where T is itself a generic parameter (typeof on a bare type parameter is
+// parse-time-limited in z42 today).
+namespace Zaia.Core;
+
+using Std;
+using Std.Collections;
+
+public class ServiceContainer {
+    private Dictionary<string, object> _services;
+
+    public ServiceContainer() {
+        this._services = new Dictionary<string, object>();
+    }
+
+    // Register a singleton, keyed by its concrete runtime type.
+    public void Register(object service) {
+        string key = service.GetType().FullName;
+        this._services.Set(key, service);
+    }
+
+    // Register under an explicit service type (e.g. an interface the instance implements).
+    public void RegisterAs(Type serviceType, object service) {
+        this._services.Set(serviceType.FullName, service);
+    }
+
+    public bool Has(Type serviceType) {
+        return this._services.ContainsKey(serviceType.FullName);
+    }
+
+    // Resolve by type; throws if nothing is registered under it.
+    public object Get(Type serviceType) {
+        string key = serviceType.FullName;
+        if (!this._services.ContainsKey(key)) {
+            throw new Exception("zaia.core: no service registered for " + key);
+        }
+        return this._services.Get(key);
+    }
+
+    // Generic convenience over Get(typeof(T)).
+    public T Resolve<T>() {
+        object o = this.Get(typeof(T));
+        return (T)o;
+    }
+}

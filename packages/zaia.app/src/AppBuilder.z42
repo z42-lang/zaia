@@ -1,0 +1,46 @@
+// AppBuilder — the configurable composition root (ASP.NET WebApplicationBuilder /
+// Blazor WebAssemblyHostBuilder shape). Register services, set the root, then Run().
+// It is the seam where client-side configuration grows without touching component
+// code: DI today, a client Router and SSR hydration next.
+//
+//   AppBuilder.Create()
+//       .Root("#app", new Counter())
+//       .Run();
+//
+// `Services` is the registration point (a zaia.core ServiceContainer). Wiring an
+// ambient provider that components resolve from is the next step; the container is
+// carried here now so that step doesn't change this API.
+namespace Zaia.App;
+
+using Std;
+using Zaia.Core;
+using Zaia.Ui;
+using Zaia.Renderer;
+using Zaia.Web;
+
+public class AppBuilder {
+    public ServiceContainer Services;
+    private string _selector;
+    private Component _root;
+
+    private AppBuilder() {
+        this.Services = new ServiceContainer();
+        this._selector = "#app";
+    }
+
+    public static AppBuilder Create() { return new AppBuilder(); }
+
+    public AppBuilder Root(string selector, Component root) {
+        this._selector = selector;
+        this._root = root;
+        return this;
+    }
+
+    // Pick the browser backend, wire the change→render loop, mount the root, and
+    // leave the VM resident so DOM events re-enter and drive re-renders.
+    public void Run() {
+        Renderer r = new Renderer(new DomBackend());
+        UiDispatch.Listener = new RenderTrigger(r);   // description signals → re-render
+        r.Mount(this._selector, this._root);
+    }
+}

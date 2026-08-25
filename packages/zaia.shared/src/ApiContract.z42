@@ -1,8 +1,13 @@
 // ApiContract — the seam that makes zaia "full-stack": an endpoint's shape defined
 // once, compiled into BOTH the server (which implements it) and the client (which
-// calls it). Rename a DTO field and both ends fail to compile together.
+// calls it). Rename a shared DTO field and both ends fail to compile together, not
+// at runtime.
 //
-// A contract subclass exposes the verb + path and nested Request / Response DTOs:
+// Mechanism (chosen for z42's static/generic constraints): the *static-convention
+// subclass*. A contract is a class carrying `static Verb` + `static Path` and the
+// nested Request / Response DTOs. Both ends reference the same nested types, so the
+// compile-time linkage comes from sharing those types — the way tRPC shares a router
+// type and a Blazor solution shares a DTO project.
 //
 //   public class GetUser : ApiContract {
 //       public static string Verb = "GET";
@@ -10,11 +15,16 @@
 //       public class Response { public string Id; public string Name; }
 //   }
 //
-// Server:  app.Map(GetUser.Verb, GetUser.Path, ctx => ...);
-// Client:  Api.Get<GetUser.Response>(GetUser.Path.Replace("{id}", id));   // M2
+//   // server (zaia.server): implement it
+//   app.MapContract(GetUser.Verb, GetUser.Path, ctx =>
+//       ctx.Json(200, Users.Find(ctx.Route("id"))));
 //
-// The typed client caller (`Api`, over z42.net.Http.HttpClient + z42.json) lands in
-// milestone M2 — this base + the pattern are the frozen seam it will build on.
+//   // client (this package): call it typed
+//   var api = new ApiClient("http://localhost:8080");
+//   GetUser.Response u = api.Get<GetUser.Response>(GetUser.Path.Replace("{id}", id));
+//
+// The base itself is a marker — the convention (static Verb/Path + nested DTOs) is
+// the contract. `ApiClient` (same package) is the typed caller that consumes it.
 namespace Zaia.Shared;
 
 using Std;

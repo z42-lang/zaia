@@ -10,10 +10,13 @@ run in the browser, on the server (SSR), or in a test.
 | Type | Role |
 |------|------|
 | `Component` | The unit of UI. Override `Render() -> VNode` to describe the view. |
-| `VNode` | Immutable description of a node: `Tag`, `Text`, `Children`, an optional click handler. `H` builds them. |
-| `H` | Element factory — `H.Div(H.H1("hi"), H.Button("go"))`. |
+| `VNode` | Node description: `Tag`, `Text`, `Children`, a string **`Attributes`** bag, and an **`Events`** bag (event name → `Action`). Fluent `Attr`/`Class`/`Id`/`On`/`OnClick`/`OnInput`/`Add`. `H` builds them. |
+| `H` | Element factory — `El`/`Leaf`/`Text` primitives + sugars (`Div`, `Span`, `P`, `Ul`, `Li`, `H1..3`, `Button`, `A(href,text)`, `Input(type,ph)`, …). |
 | `State<T>` | The **data-update** primitive. A cell you read in `Render()` and mutate to update the view. |
 | `UiDispatch` / `ChangeListener` | The change-signal seam: the description fires; the app listens. |
+
+Modeled after **React / hyperscript**: `Render()` returns a pure `VNode` tree from the
+component's data, `H` is the element factory, and nodes carry attributes + event handlers.
 
 ## Describe the view
 

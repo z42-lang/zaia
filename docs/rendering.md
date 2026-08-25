@@ -10,11 +10,14 @@ a test harness.
 
 | Type | Role |
 |------|------|
-| `RenderBackend` | The seam. Abstract ops on opaque **int node handles**: `Root`, `CreateElement`, `CreateText`, `SetText`, `AppendChild`, `OnClick`. |
-| `Renderer` | Backend-agnostic reconciler: renders the root `Component` to a `VNode` tree (from `zaia.ui`) and materializes it through a backend. `Rerender()` rebuilds after a change. |
+| `RenderBackend` | The seam. Abstract ops on opaque **int node handles**: `Root`, `CreateElement`, `CreateText`, `SetText`, `SetAttribute`, `AppendChild`, `Clear`, `On`. |
+| `Renderer` | Backend-agnostic reconciler: renders the root `Component` to a `VNode` tree (from `zaia.ui`) and materializes it through a backend. `Rerender()` clears the root and rebuilds after a change. |
 | `HtmlBackend` | A backend that produces an HTML string — SSR, and proof the reconciler needs no DOM. |
 
 ## The seam
+
+Modeled after **Blazor's renderer abstraction**: a minimal imperative mutation API a diff
+can target, not the DOM API itself. The op set is exactly what a keyed-diff patcher needs.
 
 ```z42
 public abstract class RenderBackend {
@@ -22,8 +25,10 @@ public abstract class RenderBackend {
     public abstract int  CreateElement(string tag);
     public abstract int  CreateText(string text);
     public abstract void SetText(int node, string text);
+    public abstract void SetAttribute(int node, string name, string value);
     public abstract void AppendChild(int parent, int child);
-    public abstract void OnClick(int node, Action handler);
+    public abstract void Clear(int node);                      // remove all children
+    public abstract void On(int node, string eventName, Action handler);
 }
 ```
 
@@ -54,13 +59,16 @@ keeps a tree. Nothing above the seam knows which.
 
 PoC scope is a **full (re)build** on each render: `Renderer._render()` calls
 `root.Render()`, walks the `VNode` tree, and issues `CreateElement` / `SetText` /
-`AppendChild` / `OnClick` against the backend. `Component.StateChanged()` reaches the
-active renderer (`Renderer.Active`) and reschedules.
+`SetAttribute` / `On` / `AppendChild` against the backend. `Rerender()` first calls
+`Clear(root)` so a re-render replaces rather than appends. A data change signals through
+`zaia.ui`'s `UiDispatch`; the app registers a `ChangeListener` that forwards to `Rerender()`
+(see [app-host.md](app-host.md)).
 
 **Future — diffing.** Keyed tree-diffing (compare the new `VNode` tree to the last and
 patch only the delta) is a drop-in optimization: the `RenderBackend` seam already exposes
-the mutation ops a patcher needs (it will grow `RemoveChild` / `SetAttribute`). The
-component and backend APIs do **not** change when diffing lands.
+the mutation ops a patcher needs (`SetAttribute`/`Clear` landed; it will grow a
+finer-grained `RemoveChild`). The component and backend APIs do **not** change when diffing
+lands.
 
 ## Why this shape
 

@@ -11,14 +11,19 @@ using Zaia.Core;
 
 public class RequestContext {
     private HttpServerContext _ctx;
+    private ServiceContainer _services;
     public HttpRequest Request;
     public Dictionary<string, string> RouteParams;
 
-    public RequestContext(HttpServerContext ctx, Dictionary<string, string> routeParams) {
+    public RequestContext(HttpServerContext ctx, Dictionary<string, string> routeParams, ServiceContainer services) {
         this._ctx = ctx;
         this.Request = ctx.Request;
         this.RouteParams = routeParams;
+        this._services = services;
     }
+
+    // Resolve a service registered on the app (DI seam). Sugar over the container.
+    public T Resolve<T>() { return this._services.Resolve<T>(); }
 
     // ── inbound ────────────────────────────────────────────────────────────
     public string Method() { return this.Request.Method; }

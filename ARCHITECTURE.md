@@ -49,15 +49,28 @@ Six packages, strict dependency direction (arrows point to dependencies):
   └────────────────────┘
 ```
 
-| Package | Runs on | Depends on | Status |
-|---------|---------|-----------|--------|
-| `zaia.core` | any | — | 🟢 builds |
-| `zaia.ui` | any | — | 🟢 builds |
-| `zaia.renderer` | any | `zaia.ui` | 🟢 builds (incl. a working `HtmlBackend`) |
-| `zaia.web` | wasm | `zaia.renderer`, **VM DOM builtins** | 🟢 builds; `DomBackend` stubbed until primitives land |
-| `zaia.app` | wasm / client | `zaia.ui`, `zaia.renderer`, `zaia.web` | 🟢 builds |
-| `zaia.server` | native | `zaia.core`, `z42.net`, `z42.json` | 🟢 builds |
-| `zaia.shared` | any | `zaia.core`, `z42.json` | 🟢 builds |
+| Package | Runs on | Depends on | Public seams | Status |
+|---------|---------|-----------|--------------|--------|
+| `zaia.core` | any | — | `RoutePattern` · `Result<T>` · `ServiceContainer` (DI) | 🟢 builds |
+| `zaia.ui` | any | — | `Component` · `VNode` (attrs + events) · `H` · `State<T>` · `UiDispatch`/`ChangeListener` | 🟢 builds |
+| `zaia.renderer` | any | `zaia.ui` | `RenderBackend` · `Renderer` · `HtmlBackend` | 🟢 builds (incl. a working `HtmlBackend`) |
+| `zaia.web` | wasm | `zaia.renderer`, **VM DOM builtins** | `DomBackend : RenderBackend` | 🟢 builds; `DomBackend` stubbed until primitives land |
+| `zaia.app` | wasm / client | `zaia.core`, `zaia.ui`, `zaia.renderer`, `zaia.web` | `App` · `AppBuilder` · `Router`/`RouteHandler` | 🟢 builds |
+| `zaia.server` | native | `zaia.core`, `z42.net`, `z42.json` | `WebApp` · `RequestContext` · `Middleware` · `Endpoint` | 🟢 builds |
+| `zaia.shared` | any | `zaia.core`, `z42.net`, `z42.json` | `ApiContract` (convention) · `ApiClient` (typed caller) | 🟢 builds |
+
+Every seam above is **frozen** (this pass settled the abstraction layer before building
+features on it). Concrete behavior is filled behind these seams incrementally; the one
+still-stubbed body is `DomBackend`, gated on the VM DOM primitives.
+
+### Design lineage
+
+The seams deliberately mirror proven frameworks so they read as familiar, not invented:
+`Component`/`VNode`/`H` follow **React / hyperscript**; `RenderBackend` follows **Blazor's
+renderer abstraction** (a minimal imperative mutation API a diff can target, not the DOM
+API itself); `ServiceContainer` follows **ASP.NET Core `IServiceProvider`**; `WebApp`
+follows **ASP.NET Minimal APIs**; `Router` follows **ASP.NET routing**; the `ApiContract` +
+typed `ApiClient` seam follows **tRPC / Refit-style** typed clients over a shared DTO.
 
 All seven compile today with the **nightly** z42 SDK. The only thing not yet *runnable* on
 the client is the DOM output — the `DomBackend` throws until the VM DOM primitives ship
@@ -95,13 +108,18 @@ using Zaia.Server;
 
 void Main() {
     var app = WebApp.Create();
+    app.Services.Register(new UserStore());          // DI: resolved via ctx.Resolve<T>()
     app.Use(Middleware.Logger());
     app.MapGet("/",           ctx => ctx.Text(200, "Hello from zaia"));
-    app.MapGet("/users/{id}", ctx => ctx.Json(200, Users.Find(ctx.Route("id"))));
-    app.MapPost("/users",     ctx => { User u = ctx.Body<User>(); Users.Add(u); ctx.Json(201, u); });
+    app.MapGet("/users/{id}", ctx => ctx.Json(200, ctx.Resolve<UserStore>().Find(ctx.Route("id"))));
+    app.MapPost("/users",     ctx => { User u = ctx.Body<User>(); ctx.Resolve<UserStore>().Add(u); ctx.Json(201, u); });
     app.Run("0.0.0.0", 8080);
 }
 ```
+
+Handlers stay **imperative** — `ctx.Json(...)` / `ctx.Text(...)` — sidestepping z42's
+block-lambda→`Func` inference wall. `Result<T>` (in `zaia.core`) is for your own logic, not
+the handler return type. A shared contract binds with `app.MapContract(C.Verb, C.Path, …)`.
 
 ## Web — the shape
 
@@ -131,20 +149,34 @@ void Main() { App.Mount("#app", new Counter()); }   // client
 ## Shared — end-to-end typing
 
 Define an endpoint's contract once; the server implements it, the client calls it typed.
-Rename a DTO field and both ends fail to compile together, not at runtime.
+Rename a shared DTO field and both ends fail to compile together, not at runtime.
+
+```z42
+// shared: the contract (static Verb/Path + nested DTOs — the z42-friendly convention)
+public class GetUser : ApiContract {
+    public static string Verb = "GET";
+    public static string Path = "/users/{id}";
+    public class Response { public string Id; public string Name; }
+}
+
+// server: implement it            app.MapContract(GetUser.Verb, GetUser.Path, ctx => …);
+// client: call it typed
+var api = new ApiClient("http://localhost:8080");
+GetUser.Response u = api.Get<GetUser.Response>("/users/" + id);
+```
 
 ## Repo layout
 
 ```
 zaia/
   packages/
-    zaia.core/      routing, result, DI
-    zaia.ui/        Component, VNode, H, State, UiDispatch  (describe)
-    zaia.renderer/  RenderBackend, Renderer, HtmlBackend    (render)
+    zaia.core/      RoutePattern, Result, ServiceContainer  (routing · result · DI)
+    zaia.ui/        Component, VNode, H, State, UiDispatch   (describe)
+    zaia.renderer/  RenderBackend, Renderer, HtmlBackend     (render)
     zaia.web/       DomBackend (→ VM DOM builtins)
-    zaia.app/       App.Mount — backend + change→render loop (assemble)
-    zaia.server/    WebApp, Router, Middleware, RequestContext
-    zaia.shared/    ApiContract
+    zaia.app/       App, AppBuilder, Router                  (assemble)
+    zaia.server/    WebApp, RequestContext, Middleware, Endpoint
+    zaia.shared/    ApiContract, ApiClient
     z42.workspace.toml
   examples/         hello-server (server) · counter-web (client)
   docs/             description.md · rendering.md · app-host.md · dom-interop.md

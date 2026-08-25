@@ -29,9 +29,14 @@ public class WebApp {
     private List<Endpoint> _endpoints;
     private List<Action<RequestContext, Action>> _middleware;
 
+    // The DI container, exposed for registration (ASP.NET-style `app.Services`).
+    // Handlers reach it through `ctx.Resolve<T>()`.
+    public ServiceContainer Services;
+
     private WebApp() {
         this._endpoints = new List<Endpoint>();
         this._middleware = new List<Action<RequestContext, Action>>();
+        this.Services = new ServiceContainer();
     }
 
     public static WebApp Create() { return new WebApp(); }
@@ -45,6 +50,13 @@ public class WebApp {
     public WebApp MapPost(string pattern, Action<RequestContext> handler)   { return this._map("POST", pattern, handler); }
     public WebApp MapPut(string pattern, Action<RequestContext> handler)    { return this._map("PUT", pattern, handler); }
     public WebApp MapDelete(string pattern, Action<RequestContext> handler) { return this._map("DELETE", pattern, handler); }
+
+    // Bind a shared ApiContract's endpoint: pass `Contract.Verb`, `Contract.Path`
+    // (the static-convention fields) and the handler. Same routing as MapGet/etc.,
+    // but the verb+path come from the contract both ends share.
+    public WebApp MapContract(string verb, string pattern, Action<RequestContext> handler) {
+        return this._map(verb, pattern, handler);
+    }
 
     private WebApp _map(string verb, string pattern, Action<RequestContext> handler) {
         this._endpoints.Add(new Endpoint(verb, RoutePattern.Parse(pattern), handler));
@@ -69,7 +81,7 @@ public class WebApp {
             if (e.Verb == method) {
                 RouteMatch m = e.Pattern.Match(path);
                 if (m.Matched) {
-                    RequestContext ctx = new RequestContext(hctx, m.Params);
+                    RequestContext ctx = new RequestContext(hctx, m.Params, this.Services);
                     this._runPipeline(ctx, 0, e.Handler);
                     return;
                 }
