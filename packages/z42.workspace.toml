@@ -1,14 +1,19 @@
-# zaia framework workspace — all packages compiled together so their inter-package
-# dependencies resolve via workspace discovery.
+# zaia workspace — framework libraries AND example exes compiled together so their
+# inter-package dependencies resolve via workspace discovery. A z42 workspace only
+# accepts direct-child members (members = ["*"] = every child dir with a *.z42.toml),
+# so examples live here as `example-*` members rather than a sibling examples/ tree —
+# that is what lets them consume the framework (a flat Z42_LIBS can't resolve custom
+# packages' cross-package types).
 #
-#   cd packages && z42 build --workspace --release   → packages/dist/dist/zaia.*.zpkg
+#   cd packages && z42 build --workspace --release   → packages/dist/dist/*.zpkg
 [workspace]
 members = ["*"]
 
 [workspace.build]
 output_dir = "dist"
 
-# Dependency order (z42c also topo-sorts):
+# The shippable framework libraries (topo order; z42c also topo-sorts). The example
+# exes (example-counter-ssr, example-hello-server) are members too and build alongside.
 #   ui → renderer → web → app ; core → shared ; core → server
 default-members = [
     "zaia.core",

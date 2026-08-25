@@ -169,7 +169,7 @@ GetUser.Response u = api.Get<GetUser.Response>("/users/" + id);
 
 ```
 zaia/
-  packages/
+  packages/                       ← the z42 workspace (framework libs + example exes)
     zaia.core/      RoutePattern, Result, ServiceContainer  (routing · result · DI)
     zaia.ui/        Component, VNode, H, State, UiDispatch   (describe)
     zaia.renderer/  RenderBackend, Renderer, HtmlBackend     (render)
@@ -177,37 +177,45 @@ zaia/
     zaia.app/       App, AppBuilder, Router                  (assemble)
     zaia.server/    WebApp, RequestContext, Middleware, Endpoint
     zaia.shared/    ApiContract, ApiClient
+    example-counter-ssr/   exe · Component → HtmlBackend → HTML string (runs today)
+    example-hello-server/  exe · WebApp over z42.net.Http
     z42.workspace.toml
-  examples/         hello-server (server) · counter-web (client)
   docs/             description.md · rendering.md · app-host.md · dom-interop.md
-  scripts/build.sh
+  scripts/build.sh · scripts/run-example.sh
   ARCHITECTURE.md
 ```
 
 ## Build
 
-The packages compile together as a **z42 workspace** (workspace discovery is what resolves
-`web → renderer`, `app → renderer+web`, etc. — a flat `Z42_LIBS` does not, for custom
-packages). Member manifests use the **named** form `<name>.z42.toml`.
+Everything compiles together as **one z42 workspace** — framework libraries *and* example
+exes are all direct-child members of `packages/`. Workspace discovery is what resolves the
+inter-package types (`web → renderer`, an example `→ ui + renderer`, …); a flat `Z42_LIBS`
+does **not** resolve custom-package types, so the single workspace is the mechanism. Member
+manifests use the **named** form `<name>.z42.toml`.
 
 ```sh
-cd packages && z42 build --workspace --release   # → packages/dist/dist/zaia.*.zpkg  (all six green)
+cd packages && z42 build --workspace --release   # → packages/dist/dist/*.zpkg (9 members green)
+
+# run the SSR example (Z42_LIBS = the SDK's stdlib; siblings resolve from the dist dir):
+Z42_LIBS="$(dirname "$(z42 which)")/../libs" z42vm packages/dist/dist/counter-ssr.zpkg
+# → <div class="counter"><h1>Count: 0</h1><button>Increment</button></div>
 ```
 
-> **Open build item (M1):** a z42 workspace only accepts direct-child members, so an app in
-> `examples/` can't join the `packages/` workspace as-is. Wiring examples to consume the
-> built framework zpkgs (a single-workspace layout, or a package-install step once z42 grows
-> one) is the finishing step of M1. The framework packages themselves build green today.
+> **M1 layout note:** a z42 workspace only accepts direct-child members (`members = ["*"]`),
+> so examples live *inside* the workspace (`packages/example-*`) rather than a sibling
+> `examples/` tree — that's what lets them consume the framework via workspace discovery
+> instead of a flat lib path. This was M1's finishing step; it is done.
 
 ## Roadmap
 
 | Milestone | Contents | Gate |
 |-----------|----------|------|
-| **M1 — server + SSR spine** | `core`+`server`+`renderer`(HtmlBackend) build & example runs | stdlib HTTP (done) |
+| **M1 — server + SSR spine** ✅ | `core`+`server`+`renderer`(HtmlBackend) build & example runs (`counter-ssr` renders HTML) | stdlib HTTP (done) |
 | **M2 — shared contracts** | `shared` + typed `HttpClient` calls | z42.json (done) |
 | **M3 — client render** | `web`.`DomBackend` real over DOM builtins + `counter-web` | `add-wasm-dom-poc` in nightly |
 | **M4 — full-stack demo** | server + browser sharing contracts; SSR + hydration | M1–M3 |
 | **M5 — tooling** | `z42 new --template`, dev server with live reload | M1–M4 |
 
-M1/M2 are unblocked today; M3 is gated on the DOM primitives, whose contract is frozen in
-[docs/dom-interop.md](docs/dom-interop.md) so the layers above stay stable when it lands.
+M1 is done — the SSR example runs today. M2 is unblocked; M3 is gated on the DOM primitives,
+whose contract is frozen in [docs/dom-interop.md](docs/dom-interop.md) so the layers above
+stay stable when it lands.

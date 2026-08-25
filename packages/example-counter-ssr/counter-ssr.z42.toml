@@ -1,0 +1,11 @@
+[project]
+name = "counter-ssr"
+version = "0.1.0"
+kind = "exe"
+
+[sources]
+include = ["src/**/*.z42"]
+
+[dependencies]
+"zaia.ui"       = "0.1.0"
+"zaia.renderer" = "0.1.0"
