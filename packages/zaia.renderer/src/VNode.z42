@@ -1,6 +1,6 @@
-// VNode — an immutable virtual DOM node. The renderer diffs a tree of these
-// against the live DOM and patches the difference.
-namespace Zaia.Web;
+// VNode — an immutable virtual node. The renderer walks a tree of these and drives
+// a RenderBackend to produce output (real DOM, an HTML string, …).
+namespace Zaia.Renderer;
 
 using Std;
 using Std.Collections;

@@ -28,10 +28,12 @@ void Main() {
 }
 ```
 
-**Web** — Blazor-like components (renderer lands with the DOM primitives):
+**Web** — Blazor-like components that render through a backend seam (SSR works today;
+the browser backend lands with the DOM primitives):
 
 ```z42
-using Zaia.Web;
+using Zaia.Renderer;
+using Zaia.App;
 
 class Counter : Component {
     int _count = 0;
@@ -42,7 +44,10 @@ class Counter : Component {
         );
 }
 
-void Main() { App.Mount("#app", new Counter()); }
+void Main() { App.Mount("#app", new Counter()); }              // client (needs DOM primitives)
+// server-side rendering, today:
+//   var b = new HtmlBackend(); new Renderer(b).Mount("#app", new Counter());
+//   Console.WriteLine(b.ToHtml(0));   // <div><h1>Count: 0</h1><button>Increment</button></div>
 ```
 
 **Shared** — one contract, implemented by the server, called typed by the client. Rename a
@@ -52,10 +57,14 @@ DTO field and both ends fail to compile *together*, not at runtime.
 
 | Package | Role | Status |
 |---------|------|--------|
-| [`zaia.core`](packages/zaia.core) | platform-agnostic kernel: routing, result, pipeline, DI | 🟢 |
+| [`zaia.core`](packages/zaia.core) | platform-agnostic kernel: routing, result, DI | 🟢 |
+| [`zaia.renderer`](packages/zaia.renderer) | components, VNode, the `RenderBackend` seam + reconciler, `HtmlBackend` (SSR) | 🟢 |
+| [`zaia.web`](packages/zaia.web) | `DomBackend` — the browser render backend | 🟢 builds; runs when DOM primitives land |
+| [`zaia.app`](packages/zaia.app) | `App.Mount` — the client application host | 🟢 |
 | [`zaia.server`](packages/zaia.server) | `WebApp`, router, middleware, request context | 🟢 |
 | [`zaia.shared`](packages/zaia.shared) | end-to-end API contracts + typed client calls | 🟢 |
-| [`zaia.web`](packages/zaia.web) | components, virtual DOM, renderer | ⏳ needs VM DOM primitives |
+
+Design docs: [ARCHITECTURE.md](ARCHITECTURE.md) · [docs/rendering.md](docs/rendering.md) · [docs/app-host.md](docs/app-host.md) · [docs/dom-interop.md](docs/dom-interop.md).
 
 ## Getting started
 

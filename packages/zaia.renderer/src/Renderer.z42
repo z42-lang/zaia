@@ -1,0 +1,56 @@
+// Renderer — the backend-agnostic reconciler. It renders a root Component to a
+// VNode tree and materializes it through a RenderBackend. Because it targets the
+// RenderBackend seam (never the DOM directly), the same reconciler drives the
+// browser, server-side HTML, or a test harness.
+//
+// PoC scope: a full (re)build on each render. Tree diffing / keyed patching is a
+// future optimization — the API here does not change when it lands.
+namespace Zaia.Renderer;
+
+using Std;
+using Std.Collections;
+
+public class Renderer {
+    // The renderer currently driving the UI, so Component.StateChanged() can reach
+    // it without every component holding a back-reference.
+    public static Renderer Active;
+
+    private RenderBackend _backend;
+    private int _rootHandle;
+    private Component _root;
+
+    public Renderer(RenderBackend backend) { this._backend = backend; }
+
+    public void Mount(string selector, Component root) {
+        this._rootHandle = this._backend.Root(selector);
+        this._root = root;
+        Renderer.Active = this;
+        this._render();
+    }
+
+    // Re-render after a state change. PoC: rebuild the whole subtree.
+    public void Schedule(Component c) { this._render(); }
+
+    private void _render() {
+        VNode tree = this._root.Render();
+        int node = this._build(tree);
+        this._backend.AppendChild(this._rootHandle, node);
+    }
+
+    // Materialize one VNode (and its children) through the backend; returns its handle.
+    private int _build(VNode v) {
+        if (v.Tag.Length == 0) {
+            return this._backend.CreateText(v.Text);
+        }
+        int el = this._backend.CreateElement(v.Tag);
+        if (v.Text.Length > 0) { this._backend.SetText(el, v.Text); }
+        if (v.OnClickHandler != null) { this._backend.OnClick(el, v.OnClickHandler); }
+        int i = 0;
+        while (i < v.Children.Count) {
+            int child = this._build(v.Children[i]);
+            this._backend.AppendChild(el, child);
+            i = i + 1;
+        }
+        return el;
+    }
+}

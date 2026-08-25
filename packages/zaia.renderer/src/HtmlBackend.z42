@@ -1,0 +1,48 @@
+// HtmlBackend — a reference RenderBackend that materializes the VNode tree as an
+// HTML string. It needs no DOM, so it runs anywhere today: server-side rendering,
+// and living proof that the reconciler is backend-agnostic.
+//
+// Nodes are kept as parallel arrays indexed by handle; ToHtml() serializes.
+namespace Zaia.Renderer;
+
+using Std;
+using Std.Collections;
+
+public class HtmlBackend : RenderBackend {
+    private List<string> _tag;
+    private List<string> _text;
+    private List<List<int>> _kids;
+
+    public HtmlBackend() {
+        this._tag = new List<string>();
+        this._text = new List<string>();
+        this._kids = new List<List<int>>();
+    }
+
+    private int _new(string tag, string text) {
+        int h = this._tag.Count;
+        this._tag.Add(tag);
+        this._text.Add(text);
+        this._kids.Add(new List<int>());
+        return h;
+    }
+
+    public override int Root(string selector) { return this._new("#root", ""); }
+    public override int CreateElement(string tag) { return this._new(tag, ""); }
+    public override int CreateText(string text) { return this._new("", text); }
+    public override void SetText(int node, string text) { this._text[node] = text; }
+    public override void AppendChild(int parent, int child) { this._kids[parent].Add(child); }
+    public override void OnClick(int node, Action handler) { }   // no-op for static HTML
+
+    // Serialize node `h` to HTML (pass 0 for the mount root).
+    public string ToHtml(int h) {
+        string tag = this._tag[h];
+        if (tag.Length == 0) { return this._text[h]; }          // text node
+        string inner = this._text[h];
+        List<int> kids = this._kids[h];
+        int i = 0;
+        while (i < kids.Count) { inner = inner + this.ToHtml(kids[i]); i = i + 1; }
+        if (tag == "#root") { return inner; }                   // synthetic root: children only
+        return "<" + tag + ">" + inner + "</" + tag + ">";
+    }
+}

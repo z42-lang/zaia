@@ -1,0 +1,24 @@
+// RenderBackend — the seam that makes rendering backend-agnostic. The reconciler
+// speaks only these operations; a concrete backend maps them to a real target:
+//
+//   • DomBackend   (zaia.web)  → the live browser DOM, via the VM __dom_* builtins
+//   • HtmlBackend  (future)    → an HTML string, for server-side rendering
+//   • a test backend           → an in-memory tree, for assertions
+//
+// Nodes are opaque integer handles; each backend keeps its own handle → node map.
+namespace Zaia.Renderer;
+
+using Std;
+
+public abstract class RenderBackend {
+    // The mount point for a root render (e.g. a CSS selector on the client).
+    public abstract int Root(string selector);
+
+    public abstract int CreateElement(string tag);
+    public abstract int CreateText(string text);
+    public abstract void SetText(int node, string text);
+    public abstract void AppendChild(int parent, int child);
+
+    // Attach a click handler (non-capturing for now — the PoC constraint).
+    public abstract void OnClick(int node, Action handler);
+}

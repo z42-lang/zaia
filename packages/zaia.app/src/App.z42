@@ -1,0 +1,20 @@
+// App — the client application host / composition root. It wires a concrete
+// backend (the browser DomBackend) into the renderer and mounts a root component,
+// then leaves the VM resident so DOM events re-enter z42.
+//
+// This is the "app" abstraction: the single entry point a client program calls.
+// The server's application object is `Zaia.Server.WebApp` — the two hosts mirror
+// each other across the stack.
+namespace Zaia.App;
+
+using Std;
+using Zaia.Renderer;
+using Zaia.Web;
+
+public static class App {
+    // Mount `root` under the CSS selector and start rendering in the browser.
+    public static void Mount(string selector, Component root) {
+        Renderer r = new Renderer(new DomBackend());
+        r.Mount(selector, root);
+    }
+}
