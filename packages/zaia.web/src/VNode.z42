@@ -1,0 +1,22 @@
+// VNode — an immutable virtual DOM node. The renderer diffs a tree of these
+// against the live DOM and patches the difference.
+namespace Zaia.Web;
+
+using Std;
+using Std.Collections;
+
+public class VNode {
+    public string Tag;             // "div" / "button" / … ; "" for a bare text node
+    public string Text;            // text content for text / leaf nodes
+    public List<VNode> Children;
+    public Action OnClickHandler;  // non-capturing click handler (PoC constraint)
+
+    public VNode(string tag) {
+        this.Tag = tag;
+        this.Text = "";
+        this.Children = new List<VNode>();
+    }
+
+    public VNode OnClick(Action handler) { this.OnClickHandler = handler; return this; }
+    public VNode Add(VNode child) { this.Children.Add(child); return this; }
+}

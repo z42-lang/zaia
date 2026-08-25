@@ -1,0 +1,28 @@
+// H — the element factory. `H.Div(H.H1("hi"), H.Button("go"))` builds a VNode tree
+// that reads like the markup it produces.
+namespace Zaia.Web;
+
+using Std;
+using Std.Collections;
+
+public static class H {
+    public static VNode Div(params VNode[] children) { return _el("div", children); }
+    public static VNode Span(params VNode[] children) { return _el("span", children); }
+
+    public static VNode H1(string text)     { return _leaf("h1", text); }
+    public static VNode Button(string text) { return _leaf("button", text); }
+    public static VNode Text(string text)   { return _leaf("", text); }
+
+    private static VNode _leaf(string tag, string text) {
+        VNode n = new VNode(tag);
+        n.Text = text;
+        return n;
+    }
+
+    private static VNode _el(string tag, VNode[] children) {
+        VNode n = new VNode(tag);
+        int i = 0;
+        while (i < children.Length) { n.Children.Add(children[i]); i = i + 1; }
+        return n;
+    }
+}

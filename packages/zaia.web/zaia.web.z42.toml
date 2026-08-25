@@ -1,0 +1,11 @@
+[project]
+name = "zaia.web"
+version = "0.1.0"
+kind = "lib"
+
+[sources]
+include = ["src/**/*.z42"]
+
+# NOTE: the renderer targets the VM DOM primitives added by the z42 change
+# `add-wasm-dom-poc` (ships in a nightly SDK). The component/VNode API below is
+# frozen so shared code compiles against it now; Renderer is stubbed until then.

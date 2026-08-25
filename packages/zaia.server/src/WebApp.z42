@@ -1,0 +1,92 @@
+// WebApp — the builder and host. Register routes and middleware, then Run().
+//
+// Sits directly on `HttpServer.ServeThreaded(Action<HttpServerContext>)`: on each
+// request it matches the router, builds a RequestContext, and runs the middleware
+// pipeline around the matched handler.
+namespace Zaia.Server;
+
+using Std;
+using Std.IO;
+using Std.Cli;
+using Std.Collections;
+using Std.Net.Http;
+using Zaia.Core;
+
+// One registered route: an HTTP verb + a path pattern + its handler.
+public class Endpoint {
+    public string Verb;
+    public RoutePattern Pattern;
+    public Action<RequestContext> Handler;
+
+    public Endpoint(string verb, RoutePattern pattern, Action<RequestContext> handler) {
+        this.Verb = verb;
+        this.Pattern = pattern;
+        this.Handler = handler;
+    }
+}
+
+public class WebApp {
+    private List<Endpoint> _endpoints;
+    private List<Action<RequestContext, Action>> _middleware;
+
+    private WebApp() {
+        this._endpoints = new List<Endpoint>();
+        this._middleware = new List<Action<RequestContext, Action>>();
+    }
+
+    public static WebApp Create() { return new WebApp(); }
+
+    public WebApp Use(Action<RequestContext, Action> middleware) {
+        this._middleware.Add(middleware);
+        return this;
+    }
+
+    public WebApp MapGet(string pattern, Action<RequestContext> handler)    { return this._map("GET", pattern, handler); }
+    public WebApp MapPost(string pattern, Action<RequestContext> handler)   { return this._map("POST", pattern, handler); }
+    public WebApp MapPut(string pattern, Action<RequestContext> handler)    { return this._map("PUT", pattern, handler); }
+    public WebApp MapDelete(string pattern, Action<RequestContext> handler) { return this._map("DELETE", pattern, handler); }
+
+    private WebApp _map(string verb, string pattern, Action<RequestContext> handler) {
+        this._endpoints.Add(new Endpoint(verb, RoutePattern.Parse(pattern), handler));
+        return this;
+    }
+
+    // Bind and serve until stopped. Blocks the calling thread.
+    public void Run(string host, int port) {
+        HttpServer server = new HttpServer();
+        server.Bind(host, port);
+        Console.WriteLine("zaia: listening on http://" + host + ":" + port.ToString());
+        server.ServeThreaded(hctx => this._dispatch(hctx));
+    }
+
+    private void _dispatch(HttpServerContext hctx) {
+        string method = hctx.Request.Method;
+        string path = HttpUrl.Parse(hctx.Request.Url).Path;
+
+        int i = 0;
+        while (i < this._endpoints.Count) {
+            Endpoint e = this._endpoints[i];
+            if (e.Verb == method) {
+                RouteMatch m = e.Pattern.Match(path);
+                if (m.Matched) {
+                    RequestContext ctx = new RequestContext(hctx, m.Params);
+                    this._runPipeline(ctx, 0, e.Handler);
+                    return;
+                }
+            }
+            i = i + 1;
+        }
+        hctx.SendStatus(404);
+    }
+
+    // Run middleware[index], giving it a `next` that advances to index+1; the tail
+    // of the chain invokes the matched handler.
+    private void _runPipeline(RequestContext ctx, int index, Action<RequestContext> final) {
+        if (index >= this._middleware.Count) { final(ctx); return; }
+        // Bind the indexed delegate to a local before invoking — z42 rejects the
+        // `list[i](args)` call form directly (E0402 unsupported call form).
+        Action<RequestContext, Action> mw = this._middleware[index];
+        Action next = () => this._runPipeline(ctx, index + 1, final);
+        mw(ctx, next);
+    }
+}

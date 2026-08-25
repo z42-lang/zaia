@@ -1,0 +1,58 @@
+// RequestContext — the one object a handler receives. Wraps the stdlib
+// HttpServerContext and adds route params, typed body binding, and typed responses.
+namespace Zaia.Server;
+
+using Std;
+using Std.Collections;
+using Std.Encoding;
+using Std.Net.Http;
+using Std.Json;
+using Zaia.Core;
+
+public class RequestContext {
+    private HttpServerContext _ctx;
+    public HttpRequest Request;
+    public Dictionary<string, string> RouteParams;
+
+    public RequestContext(HttpServerContext ctx, Dictionary<string, string> routeParams) {
+        this._ctx = ctx;
+        this.Request = ctx.Request;
+        this.RouteParams = routeParams;
+    }
+
+    // ── inbound ────────────────────────────────────────────────────────────
+    public string Method() { return this.Request.Method; }
+
+    public string Path() { return HttpUrl.Parse(this.Request.Url).Path; }
+
+    // A captured route segment, e.g. Route("id") for pattern "/users/{id}".
+    public string Route(string name) {
+        if (this.RouteParams.ContainsKey(name)) { return this.RouteParams.Get(name); }
+        return "";
+    }
+
+    public string Header(string name) { return this.Request.Headers.Get(name); }
+
+    // Deserialize the JSON request body into T (z42.json).
+    public T Body<T>() {
+        return JsonSerializer.Deserialize<T>(this._bodyString());
+    }
+
+    public string BodyString() { return this._bodyString(); }
+
+    // ── outbound ───────────────────────────────────────────────────────────
+    public void Text(int status, string text) { this._ctx.SendText(status, text); }
+
+    // Serialize `value` to JSON and send it (z42.json).
+    public void Json(int status, object value) {
+        this._ctx.SendJson(status, JsonSerializer.Serialize(value));
+    }
+
+    public void Status(int status) { this._ctx.SendStatus(status); }
+
+    private string _bodyString() {
+        byte[] b = this.Request.Body;
+        if (b == null) { return ""; }
+        return Utf8.GetString(b);
+    }
+}

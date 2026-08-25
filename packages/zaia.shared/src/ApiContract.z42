@@ -1,0 +1,23 @@
+// ApiContract — the seam that makes zaia "full-stack": an endpoint's shape defined
+// once, compiled into BOTH the server (which implements it) and the client (which
+// calls it). Rename a DTO field and both ends fail to compile together.
+//
+// A contract subclass exposes the verb + path and nested Request / Response DTOs:
+//
+//   public class GetUser : ApiContract {
+//       public static string Verb = "GET";
+//       public static string Path = "/users/{id}";
+//       public class Response { public string Id; public string Name; }
+//   }
+//
+// Server:  app.Map(GetUser.Verb, GetUser.Path, ctx => ...);
+// Client:  Api.Get<GetUser.Response>(GetUser.Path.Replace("{id}", id));   // M2
+//
+// The typed client caller (`Api`, over z42.net.Http.HttpClient + z42.json) lands in
+// milestone M2 — this base + the pattern are the frozen seam it will build on.
+namespace Zaia.Shared;
+
+using Std;
+
+public abstract class ApiContract {
+}

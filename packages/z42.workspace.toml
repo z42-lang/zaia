@@ -1,0 +1,12 @@
+# zaia framework workspace — the four packages compiled together so their
+# inter-dependencies (server/web/shared → core) resolve via workspace discovery.
+#
+#   cd packages && z42 build --workspace --release
+#   → per-member zpkgs under packages/dist/dist/
+[workspace]
+members = ["*"]
+
+[workspace.build]
+output_dir = "dist"
+
+default-members = ["zaia.core", "zaia.shared", "zaia.web", "zaia.server"]

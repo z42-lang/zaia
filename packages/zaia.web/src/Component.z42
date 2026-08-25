@@ -1,0 +1,12 @@
+// Component — the base class for a piece of UI. Subclass it and override Render().
+// Call StateChanged() after mutating state to schedule a re-render.
+namespace Zaia.Web;
+
+using Std;
+
+public abstract class Component {
+    public abstract VNode Render();
+
+    // Ask the renderer to re-run Render() and patch the DOM difference.
+    public void StateChanged() { App.RequestRender(this); }
+}

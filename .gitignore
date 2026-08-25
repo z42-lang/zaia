@@ -1,0 +1,7 @@
+# z42 build outputs
+/dist/
+**/dist/
+**/.cache/
+/artifacts/
+*.zsym
+.DS_Store

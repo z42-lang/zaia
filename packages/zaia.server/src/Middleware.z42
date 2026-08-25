@@ -1,0 +1,24 @@
+// Middleware — cross-cutting behavior that wraps every matched handler.
+//
+// A middleware is an `Action<RequestContext, Action>` `(ctx, next)`: do work, call
+// `next()` to continue the pipeline (or don't, to short-circuit). Structural func
+// type → passes across package boundaries cleanly (no named delegate).
+namespace Zaia.Server;
+
+using Std;
+using Std.IO;
+
+public static class Middleware {
+    // Logs "METHOD /path" for each request, then continues.
+    //
+    // Returned as a method-group reference rather than a block lambda: a block
+    // lambda with no trailing expression infers as `Func<…,unknown>` and won't
+    // assign to `Action<…>`, whereas a named void method converts cleanly.
+    public static Action<RequestContext, Action> Logger() {
+        Action<RequestContext, Action> mw = (RequestContext ctx, Action next) => {
+            Console.WriteLine("[zaia] " + ctx.Method() + " " + ctx.Path());
+            next();
+        };
+        return mw;
+    }
+}

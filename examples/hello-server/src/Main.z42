@@ -1,0 +1,37 @@
+// hello-server — a minimal zaia HTTP server. Buildable today on the z42 stdlib.
+//
+//   z42 build z42.toml && z42 run z42.toml
+//   curl http://localhost:8080/
+//   curl http://localhost:8080/users/42
+//   curl -X POST --data 'hello' http://localhost:8080/echo
+namespace HelloServer;
+
+using Std;
+using Std.IO;
+using Std.Json;
+using Zaia.Server;
+
+class User {
+    [JsonProperty("id")]   public string Id { get; set; }
+    [JsonProperty("name")] public string Name { get; set; }
+}
+
+void Main() {
+    var app = WebApp.Create();
+
+    app.Use(Middleware.Logger());
+
+    app.MapGet("/", ctx => ctx.Text(200, "Hello from zaia"));
+
+    app.MapGet("/users/{id}", ctx => {
+        User u = new User();
+        u.Id = ctx.Route("id");
+        u.Name = "User " + ctx.Route("id");
+        ctx.Json(200, u);
+    });
+
+    app.MapPost("/echo", ctx => ctx.Text(200, ctx.BodyString()));
+
+    Console.WriteLine("zaia hello-server — try: curl http://localhost:8080/users/42");
+    app.Run("0.0.0.0", 8080);
+}

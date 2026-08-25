@@ -1,0 +1,13 @@
+[project]
+name = "hello-server"
+version = "0.1.0"
+kind = "exe"
+
+[sources]
+include = ["src/**/*.z42"]
+
+[dependencies]
+"zaia.server" = "0.1.0"
+"zaia.core"   = "0.1.0"
+"z42.net"     = "0.1.0"
+"z42.json"    = "0.1.0"
