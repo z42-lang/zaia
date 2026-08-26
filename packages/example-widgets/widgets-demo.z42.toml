@@ -1,0 +1,11 @@
+[project]
+name = "widgets-demo"
+version = "0.1.0"
+kind = "exe"
+
+[sources]
+include = ["src/**/*.z42"]
+
+[dependencies]
+"zaia.paint"   = "0.1.0"
+"zaia.widgets" = "0.1.0"

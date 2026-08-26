@@ -1,0 +1,37 @@
+// InputState — the per-frame input snapshot fed to the widget layer, the analog of
+// egui's RawInput and nuklear's nk_input. A host builds one each frame (pointer
+// position, button edges, scroll, elapsed time) and hands it to Gui.Update; widgets
+// hit-test against it. Edge flags (Pressed/Released) are "this frame only".
+namespace Zaia.Paint;
+
+using Std;
+
+public class InputState {
+    public double PointerX;
+    public double PointerY;
+    public bool PointerDown;       // held this frame
+    public bool PointerPressed;    // went down this frame (edge)
+    public bool PointerReleased;   // went up this frame (edge)
+    public double ScrollY;
+    public double Dt;              // seconds since last frame
+
+    public InputState() {
+        this.PointerX = 0.0;
+        this.PointerY = 0.0;
+        this.PointerDown = false;
+        this.PointerPressed = false;
+        this.PointerReleased = false;
+        this.ScrollY = 0.0;
+        this.Dt = 0.0;
+    }
+
+    // Convenience for hosts/tests: a pointer at (x,y) with a given button state.
+    public static InputState At(double x, double y, bool down, bool pressed, bool released) {
+        InputState s = new InputState();
+        s.PointerX = x; s.PointerY = y;
+        s.PointerDown = down; s.PointerPressed = pressed; s.PointerReleased = released;
+        return s;
+    }
+
+    public bool PointerIn(Rect r) { return r.Contains(this.PointerX, this.PointerY); }
+}

@@ -1,0 +1,72 @@
+// DrawCmd — one entry in a backend-agnostic draw-command list. This is the paint
+// layer's *output*: the analog of an `epaint::Shape` (egui) or an `nk_command`
+// (nuklear). A backend consumes a list of these and rasterizes them.
+//
+// z42 has no enums/unions, so commands are a class hierarchy with an int `Kind`
+// tag (nuklear tags nk_command with an enum the same way) — backends switch on
+// Kind rather than chained `is`/`as`, which keeps cross-zpkg dispatch cheap.
+namespace Zaia.Paint;
+
+using Std;
+
+public static class DrawKind {
+    public static int Rect   = 1;
+    public static int Text   = 2;
+    public static int Line   = 3;
+    public static int Circle = 4;
+    public static int Clip   = 5;   // push (Rect set) / pop (Push=false) a clip region
+}
+
+public abstract class DrawCmd {
+    public int Kind;
+    public DrawCmd(int kind) { this.Kind = kind; }
+}
+
+public class RectCmd : DrawCmd {
+    public Rect Rect;
+    public Color Fill;
+    public double Rounding;
+    public RectCmd(Rect rect, Color fill, double rounding) : base(DrawKind.Rect) {
+        this.Rect = rect; this.Fill = fill; this.Rounding = rounding;
+    }
+}
+
+public class TextCmd : DrawCmd {
+    public double X;
+    public double Y;
+    public string Text;
+    public Color Color;
+    public double Size;
+    public TextCmd(double x, double y, string text, Color color, double size) : base(DrawKind.Text) {
+        this.X = x; this.Y = y; this.Text = text; this.Color = color; this.Size = size;
+    }
+}
+
+public class LineCmd : DrawCmd {
+    public double X0;
+    public double Y0;
+    public double X1;
+    public double Y1;
+    public Stroke Stroke;
+    public LineCmd(double x0, double y0, double x1, double y1, Stroke stroke) : base(DrawKind.Line) {
+        this.X0 = x0; this.Y0 = y0; this.X1 = x1; this.Y1 = y1; this.Stroke = stroke;
+    }
+}
+
+public class CircleCmd : DrawCmd {
+    public double Cx;
+    public double Cy;
+    public double R;
+    public Color Fill;
+    public CircleCmd(double cx, double cy, double r, Color fill) : base(DrawKind.Circle) {
+        this.Cx = cx; this.Cy = cy; this.R = r; this.Fill = fill;
+    }
+}
+
+public class ClipCmd : DrawCmd {
+    public Rect Rect;   // ignored when Push == false (pop)
+    public bool Push;
+    public ClipCmd(Rect rect, bool push) : base(DrawKind.Clip) {
+        this.Rect = rect; this.Push = push;
+    }
+}

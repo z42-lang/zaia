@@ -1,0 +1,42 @@
+// DrawList — an ordered buffer of DrawCmds for one frame; a backend rasterizes it.
+// Painter — ergonomic helpers that append the right DrawCmd (egui's Painter /
+// nuklear's nk_stroke_*/nk_fill_* over a command buffer). Widgets paint through a
+// Painter; nothing above the backend seam knows how commands become pixels.
+namespace Zaia.Paint;
+
+using Std;
+using Std.Collections;
+
+public class DrawList {
+    public List<DrawCmd> Cmds;
+
+    public DrawList() { this.Cmds = new List<DrawCmd>(); }
+
+    public void Add(DrawCmd cmd) { this.Cmds.Add(cmd); }
+    public void Clear() { this.Cmds.Clear(); }
+    public int Count() { return this.Cmds.Count; }
+}
+
+public class Painter {
+    private DrawList _list;
+
+    public Painter(DrawList list) { this._list = list; }
+
+    public void Rect(Rect r, Color fill, double rounding) { this._list.Add(new RectCmd(r, fill, rounding)); }
+    public void RectFilled(Rect r, Color fill)            { this._list.Add(new RectCmd(r, fill, 0.0)); }
+
+    public void Text(double x, double y, string text, Color color, double size) {
+        this._list.Add(new TextCmd(x, y, text, color, size));
+    }
+
+    public void Line(double x0, double y0, double x1, double y1, Stroke stroke) {
+        this._list.Add(new LineCmd(x0, y0, x1, y1, stroke));
+    }
+
+    public void Circle(double cx, double cy, double r, Color fill) {
+        this._list.Add(new CircleCmd(cx, cy, r, fill));
+    }
+
+    public void PushClip(Rect r) { this._list.Add(new ClipCmd(r, true)); }
+    public void PopClip()        { this._list.Add(new ClipCmd(null, false)); }
+}
