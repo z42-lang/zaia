@@ -18,26 +18,33 @@ using Zaia.App;
 void Main() { App.Mount("#app", new Counter()); }
 ```
 
-`App.Mount` is deliberately tiny today:
+`App.Mount` is the one-liner entry; it delegates to `AppBuilder`, the configurable
+composition root (ASP.NET `WebApplicationBuilder` / Blazor `WebAssemblyHostBuilder` shape):
 
 ```z42
 public static void Mount(string selector, Component root) {
-    Renderer r = new Renderer(new DomBackend());
-    r.Mount(selector, root);
+    AppBuilder.Create().Root(selector, root).Run();
 }
+
+// AppBuilder.Run(): pick the backend, wire the reactive loop, mount, stay resident.
+AppBuilder.Create()
+    .Root("#app", new Counter())
+    .Run();
 ```
 
-It is the seam where **lifecycle and composition** grow:
+The host is where **lifecycle and composition** grow — the seams now defined:
 
-- **Resident loop.** After `Mount` returns, the VM stays alive (the client host does not
-  dispose it) so DOM events re-enter z42 and drive re-renders.
-- **Configuration & DI.** An `AppBuilder` will carry configuration and a service
-  container (from `zaia.core`) so components can resolve services without globals.
-- **Routing.** A client `Router` (reusing `zaia.core.RoutePattern`) will map the URL to a
-  root component for single-page navigation.
+- **Resident loop.** ✅ After `Run` returns, the VM stays alive (the client host does not
+  dispose it) so DOM events re-enter z42 and drive re-renders through the `ChangeListener`.
+- **Configuration & DI.** ✅ `AppBuilder.Services` is a `zaia.core.ServiceContainer` — the
+  registration seam. Wiring an ambient provider components resolve from is the next step and
+  does not change this API.
+- **Routing.** ✅ `Router` (reusing `zaia.core.RoutePattern`) maps a URL path to a root
+  `Component` via a nominal `RouteHandler`. Resolve logic is testable today; binding it to
+  browser history/`popstate` needs the DOM primitives.
 - **SSR + hydration.** The server renders a component with `HtmlBackend` and ships the
   HTML; the client host attaches a `DomBackend` to the same component tree instead of
-  rebuilding it.
+  rebuilding it. (Planned — needs the DOM primitives.)
 
 ## Why a separate layer
 

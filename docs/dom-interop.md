@@ -26,8 +26,10 @@ stub so the runtime keeps building on every platform:
 | `__dom_create_element` | `CreateElement(tag)` | `document.createElement`; returns handle |
 | `__dom_create_text` | `CreateText(text)` | text node |
 | `__dom_set_text` | `SetText(node, text)` | `textContent` |
+| `__dom_set_attribute` | `SetAttribute(node, name, value)` | `setAttribute` (class / id / href / value / …) |
 | `__dom_append_child` | `AppendChild(parent, child)` | |
-| `__dom_add_event_listener` | `OnClick(node, handler)` | stores a non-capturing handler + re-enters the VM on the event |
+| `__dom_clear` | `Clear(node)` | remove all children (reconciler's rebuild reset) |
+| `__dom_add_event_listener` | `On(node, eventName, handler)` | stores a non-capturing handler + re-enters the VM on the event; `eventName` = "click" / "input" / … |
 
 Node handles are integers indexing a wasm-side `thread_local Vec<web_sys::Node>` — web_sys
 objects never cross into z42 values.
@@ -53,8 +55,8 @@ re-established cleanly, that's a stop-and-design point (it may pull the heap-sco
 ## PoC boundary (frozen here)
 
 - **Non-capturing handlers only** (`Action` / method-group → `FuncRef`). Capturing closures
-  need a GC-rooted env across event turns — deferred. `zaia.renderer`'s `OnClick(Action)`
-  already reflects this.
+  need a GC-rooted env across event turns — deferred. `zaia.renderer`'s `On(node, eventName,
+  Action)` already reflects this.
 - **Imperative build, no diffing** at the VM level — the renderer does the reconciliation.
 - **Ships a pre-built app `.zbc`** loaded via the handle API (`loadZbc` → `resolveEntry` →
   `invoke`, no `dispose` so the VM stays resident). In-browser *compilation* is a separate

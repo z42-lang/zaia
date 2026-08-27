@@ -1,0 +1,38 @@
+// counter-ssr — the client component stack (zaia.ui describe → zaia.renderer render)
+// exercised server-side through HtmlBackend. It builds a real Component, materializes
+// it to an HTML string, prints it, and exits — no browser, no DOM primitives, no
+// blocking server. This is the "example runs" proof for the client render spine: the
+// same Counter would mount live in the browser once DomBackend's primitives ship, with
+// zero changes above the backend seam.
+//
+//   z42 build --workspace --release      (from packages/, builds this too)
+//   z42vm ../dist/dist/counter-ssr.zpkg  (Z42_LIBS = SDK libs)
+//   → <div class="counter"><h1>Count: 0</h1><button>Increment</button></div>
+namespace CounterSsr;
+
+using Std;
+using Std.IO;
+using Zaia.Ui;
+using Zaia.Renderer;
+
+class Counter : Component {
+    private State<int> _count;
+
+    public Counter() { this._count = new State<int>(0); }
+
+    public override VNode Render() {
+        VNode root = H.Div(
+            H.H1("Count: " + this._count.Get().ToString()),
+            H.Button("Increment").OnClick(() => this._count.Set(this._count.Get() + 1))
+        );
+        root.Class("counter");
+        return root;
+    }
+}
+
+void Main() {
+    HtmlBackend backend = new HtmlBackend();
+    Renderer renderer = new Renderer(backend);
+    renderer.Mount("#app", new Counter());
+    Console.WriteLine(backend.ToHtml(0));
+}

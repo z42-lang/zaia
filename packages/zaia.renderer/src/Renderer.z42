@@ -1,9 +1,10 @@
 // Renderer — pure rendering. It takes a UI description (a Component's VNode tree,
 // from zaia.ui) and materializes it through a RenderBackend. It knows nothing about
-// data updates or event wiring — the app drives it via Schedule().
+// data updates or event wiring — the app drives it via Rerender().
 //
-// PoC scope: a full (re)build on each render. Keyed tree-diffing is a drop-in
-// optimization that does not change this API.
+// PoC scope: a full (re)build on each render (Clear the root, rebuild the tree).
+// Keyed tree-diffing is a drop-in optimization behind this same API and the same
+// RenderBackend seam — the component/backend contracts do not change when it lands.
 namespace Zaia.Renderer;
 
 using Std;
@@ -25,7 +26,10 @@ public class Renderer {
 
     // Re-render the mounted tree. The app subscribes to zaia.ui's UiDispatch and
     // forwards here when the description signals a data change.
-    public void Rerender() { this._render(); }
+    public void Rerender() {
+        this._backend.Clear(this._rootHandle);   // reset before rebuild (PoC: full replace)
+        this._render();
+    }
 
     private void _render() {
         VNode tree = this._root.Render();
@@ -40,7 +44,29 @@ public class Renderer {
         }
         int el = this._backend.CreateElement(v.Tag);
         if (v.Text.Length > 0) { this._backend.SetText(el, v.Text); }
-        if (v.OnClickHandler != null) { this._backend.OnClick(el, v.OnClickHandler); }
+
+        // attributes
+        string[] anames = v.Attributes.Keys();
+        int a = 0;
+        while (a < anames.Length) {
+            string name = anames[a];
+            this._backend.SetAttribute(el, name, v.Attributes.Get(name));
+            a = a + 1;
+        }
+
+        // events
+        string[] enames = v.Events.Keys();
+        int e = 0;
+        while (e < enames.Length) {
+            string ev = enames[e];
+            // Pass the handler straight through: pulling it into a local Action
+            // hits E0402 (cross-zpkg delegate assign), but passing as an argument
+            // is fine — the same move the backend seam relies on everywhere.
+            this._backend.On(el, ev, v.Events.Get(ev));
+            e = e + 1;
+        }
+
+        // children
         int i = 0;
         while (i < v.Children.Count) {
             int child = this._build(v.Children[i]);

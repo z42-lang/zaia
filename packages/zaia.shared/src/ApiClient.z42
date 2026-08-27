@@ -1,0 +1,48 @@
+// ApiClient — the typed caller half of the full-stack contract seam. It turns an
+// endpoint's Path + DTO types (see ApiContract) into a typed method call: serialize
+// the request with z42.json, send it over z42.net's HttpClient, deserialize the
+// response into the contract's Response type. Modeled after a Refit / typed-fetch
+// client: the transport is generic, the types come from the shared contract.
+//
+//   var api = new ApiClient("http://localhost:8080");
+//   GetUser.Response u = api.Get<GetUser.Response>("/users/" + id);
+//   CreateUser.Response c = api.Post<CreateUser.Request, CreateUser.Response>(
+//       "/users", req);
+//
+// The generic decode mirrors zaia.server's RequestContext.Body<T>() — the same
+// JsonSerializer.Deserialize<T> pattern, on the other end of the wire.
+namespace Zaia.Shared;
+
+using Std;
+using Std.Encoding;
+using Std.Net.Http;
+using Std.Json;
+
+public class ApiClient {
+    private HttpClient _http;
+    private string _baseUrl;
+
+    public ApiClient(string baseUrl) {
+        this._http = new HttpClient();
+        this._baseUrl = baseUrl;
+    }
+
+    // GET `path`, deserialize the JSON response body into TRes.
+    public TRes Get<TRes>(string path) {
+        HttpResponse resp = this._http.Get(this._baseUrl + path);
+        return JsonSerializer.Deserialize<TRes>(this._bodyString(resp));
+    }
+
+    // POST `body` (as JSON) to `path`, deserialize the JSON response into TRes.
+    public TRes Post<TReq, TRes>(string path, TReq body) {
+        string json = JsonSerializer.Serialize(body);
+        HttpResponse resp = this._http.PostString(this._baseUrl + path, json, "application/json");
+        return JsonSerializer.Deserialize<TRes>(this._bodyString(resp));
+    }
+
+    private string _bodyString(HttpResponse resp) {
+        byte[] b = resp.Body;
+        if (b == null) { return ""; }
+        return Utf8.GetString(b);
+    }
+}

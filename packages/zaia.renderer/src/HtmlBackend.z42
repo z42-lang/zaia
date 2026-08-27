@@ -3,6 +3,8 @@
 // and living proof that the reconciler is backend-agnostic.
 //
 // Nodes are kept as parallel arrays indexed by handle; ToHtml() serializes.
+// Attribute keys are sorted before serialization so the output is deterministic
+// (Dictionary iteration order is not) — SSR output that golden tests can pin.
 namespace Zaia.Renderer;
 
 using Std;
@@ -12,11 +14,13 @@ public class HtmlBackend : RenderBackend {
     private List<string> _tag;
     private List<string> _text;
     private List<List<int>> _kids;
+    private List<Dictionary<string, string>> _attrs;
 
     public HtmlBackend() {
         this._tag = new List<string>();
         this._text = new List<string>();
         this._kids = new List<List<int>>();
+        this._attrs = new List<Dictionary<string, string>>();
     }
 
     private int _new(string tag, string text) {
@@ -24,25 +28,49 @@ public class HtmlBackend : RenderBackend {
         this._tag.Add(tag);
         this._text.Add(text);
         this._kids.Add(new List<int>());
+        this._attrs.Add(new Dictionary<string, string>());
         return h;
     }
 
-    public override int Root(string selector) { return this._new("#root", ""); }
-    public override int CreateElement(string tag) { return this._new(tag, ""); }
-    public override int CreateText(string text) { return this._new("", text); }
-    public override void SetText(int node, string text) { this._text[node] = text; }
+    public override int Root(string selector)               { return this._new("#root", ""); }
+    public override int CreateElement(string tag)           { return this._new(tag, ""); }
+    public override int CreateText(string text)             { return this._new("", text); }
+    public override void SetText(int node, string text)     { this._text[node] = text; }
+    public override void SetAttribute(int node, string name, string value) { this._attrs[node].Set(name, value); }
     public override void AppendChild(int parent, int child) { this._kids[parent].Add(child); }
-    public override void OnClick(int node, Action handler) { }   // no-op for static HTML
+    public override void Clear(int node)                    { this._kids[node].Clear(); }
+    public override void On(int node, string eventName, Action handler) { }   // no-op for static HTML
 
     // Serialize node `h` to HTML (pass 0 for the mount root).
     public string ToHtml(int h) {
         string tag = this._tag[h];
         if (tag.Length == 0) { return this._text[h]; }          // text node
+
         string inner = this._text[h];
         List<int> kids = this._kids[h];
         int i = 0;
         while (i < kids.Count) { inner = inner + this.ToHtml(kids[i]); i = i + 1; }
+
         if (tag == "#root") { return inner; }                   // synthetic root: children only
-        return "<" + tag + ">" + inner + "</" + tag + ">";
+        return "<" + tag + this._attrString(h) + ">" + inner + "</" + tag + ">";
+    }
+
+    // Render attributes as ` k="v"` pairs, sorted by name for deterministic output.
+    private string _attrString(int h) {
+        Dictionary<string, string> at = this._attrs[h];
+        List<string> keys = new List<string>();
+        string[] raw = at.Keys();
+        int i = 0;
+        while (i < raw.Length) { keys.Add(raw[i]); i = i + 1; }
+        keys.Sort();
+
+        string outStr = "";
+        int j = 0;
+        while (j < keys.Count) {
+            string k = keys[j];
+            outStr = outStr + " " + k + "=\"" + at.Get(k) + "\"";
+            j = j + 1;
+        }
+        return outStr;
     }
 }

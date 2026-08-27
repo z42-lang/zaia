@@ -1,6 +1,7 @@
-// hello-server — a minimal zaia HTTP server. Buildable today on the z42 stdlib.
+// hello-server — a minimal zaia HTTP server, a workspace-member exe over zaia.server.
 //
-//   z42 build z42.toml && z42 run z42.toml
+//   cd packages && z42 build --workspace --release   # builds this too
+//   ./scripts/run-example.sh hello-server            # serves on :8080
 //   curl http://localhost:8080/
 //   curl http://localhost:8080/users/42
 //   curl -X POST --data 'hello' http://localhost:8080/echo

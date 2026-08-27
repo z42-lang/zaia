@@ -49,15 +49,28 @@ Six packages, strict dependency direction (arrows point to dependencies):
   └────────────────────┘
 ```
 
-| Package | Runs on | Depends on | Status |
-|---------|---------|-----------|--------|
-| `zaia.core` | any | — | 🟢 builds |
-| `zaia.ui` | any | — | 🟢 builds |
-| `zaia.renderer` | any | `zaia.ui` | 🟢 builds (incl. a working `HtmlBackend`) |
-| `zaia.web` | wasm | `zaia.renderer`, **VM DOM builtins** | 🟢 builds; `DomBackend` stubbed until primitives land |
-| `zaia.app` | wasm / client | `zaia.ui`, `zaia.renderer`, `zaia.web` | 🟢 builds |
-| `zaia.server` | native | `zaia.core`, `z42.net`, `z42.json` | 🟢 builds |
-| `zaia.shared` | any | `zaia.core`, `z42.json` | 🟢 builds |
+| Package | Runs on | Depends on | Public seams | Status |
+|---------|---------|-----------|--------------|--------|
+| `zaia.core` | any | — | `RoutePattern` · `Result<T>` · `ServiceContainer` (DI) | 🟢 builds |
+| `zaia.ui` | any | — | `Component` · `VNode` (attrs + events) · `H` · `State<T>` · `UiDispatch`/`ChangeListener` | 🟢 builds |
+| `zaia.renderer` | any | `zaia.ui` | `RenderBackend` · `Renderer` · `HtmlBackend` | 🟢 builds (incl. a working `HtmlBackend`) |
+| `zaia.web` | wasm | `zaia.renderer`, **VM DOM builtins** | `DomBackend : RenderBackend` | 🟢 builds; `DomBackend` stubbed until primitives land |
+| `zaia.app` | wasm / client | `zaia.core`, `zaia.ui`, `zaia.renderer`, `zaia.web` | `App` · `AppBuilder` · `Router`/`RouteHandler` | 🟢 builds |
+| `zaia.server` | native | `zaia.core`, `z42.net`, `z42.json` | `WebApp` · `RequestContext` · `Middleware` · `Endpoint` | 🟢 builds |
+| `zaia.shared` | any | `zaia.core`, `z42.net`, `z42.json` | `ApiContract` (convention) · `ApiClient` (typed caller) | 🟢 builds |
+
+Every seam above is **frozen** (this pass settled the abstraction layer before building
+features on it). Concrete behavior is filled behind these seams incrementally; the one
+still-stubbed body is `DomBackend`, gated on the VM DOM primitives.
+
+### Design lineage
+
+The seams deliberately mirror proven frameworks so they read as familiar, not invented:
+`Component`/`VNode`/`H` follow **React / hyperscript**; `RenderBackend` follows **Blazor's
+renderer abstraction** (a minimal imperative mutation API a diff can target, not the DOM
+API itself); `ServiceContainer` follows **ASP.NET Core `IServiceProvider`**; `WebApp`
+follows **ASP.NET Minimal APIs**; `Router` follows **ASP.NET routing**; the `ApiContract` +
+typed `ApiClient` seam follows **tRPC / Refit-style** typed clients over a shared DTO.
 
 All seven compile today with the **nightly** z42 SDK. The only thing not yet *runnable* on
 the client is the DOM output — the `DomBackend` throws until the VM DOM primitives ship
@@ -95,13 +108,18 @@ using Zaia.Server;
 
 void Main() {
     var app = WebApp.Create();
+    app.Services.Register(new UserStore());          // DI: resolved via ctx.Resolve<T>()
     app.Use(Middleware.Logger());
     app.MapGet("/",           ctx => ctx.Text(200, "Hello from zaia"));
-    app.MapGet("/users/{id}", ctx => ctx.Json(200, Users.Find(ctx.Route("id"))));
-    app.MapPost("/users",     ctx => { User u = ctx.Body<User>(); Users.Add(u); ctx.Json(201, u); });
+    app.MapGet("/users/{id}", ctx => ctx.Json(200, ctx.Resolve<UserStore>().Find(ctx.Route("id"))));
+    app.MapPost("/users",     ctx => { User u = ctx.Body<User>(); ctx.Resolve<UserStore>().Add(u); ctx.Json(201, u); });
     app.Run("0.0.0.0", 8080);
 }
 ```
+
+Handlers stay **imperative** — `ctx.Json(...)` / `ctx.Text(...)` — sidestepping z42's
+block-lambda→`Func` inference wall. `Result<T>` (in `zaia.core`) is for your own logic, not
+the handler return type. A shared contract binds with `app.MapContract(C.Verb, C.Path, …)`.
 
 ## Web — the shape
 
@@ -131,51 +149,73 @@ void Main() { App.Mount("#app", new Counter()); }   // client
 ## Shared — end-to-end typing
 
 Define an endpoint's contract once; the server implements it, the client calls it typed.
-Rename a DTO field and both ends fail to compile together, not at runtime.
+Rename a shared DTO field and both ends fail to compile together, not at runtime.
+
+```z42
+// shared: the contract (static Verb/Path + nested DTOs — the z42-friendly convention)
+public class GetUser : ApiContract {
+    public static string Verb = "GET";
+    public static string Path = "/users/{id}";
+    public class Response { public string Id; public string Name; }
+}
+
+// server: implement it            app.MapContract(GetUser.Verb, GetUser.Path, ctx => …);
+// client: call it typed
+var api = new ApiClient("http://localhost:8080");
+GetUser.Response u = api.Get<GetUser.Response>("/users/" + id);
+```
 
 ## Repo layout
 
 ```
 zaia/
-  packages/
-    zaia.core/      routing, result, DI
-    zaia.ui/        Component, VNode, H, State, UiDispatch  (describe)
-    zaia.renderer/  RenderBackend, Renderer, HtmlBackend    (render)
+  packages/                       ← the z42 workspace (framework libs + example exes)
+    zaia.core/      RoutePattern, Result, ServiceContainer  (routing · result · DI)
+    zaia.ui/        Component, VNode, H, State, UiDispatch   (describe)
+    zaia.renderer/  RenderBackend, Renderer, HtmlBackend     (render)
     zaia.web/       DomBackend (→ VM DOM builtins)
-    zaia.app/       App.Mount — backend + change→render loop (assemble)
-    zaia.server/    WebApp, Router, Middleware, RequestContext
-    zaia.shared/    ApiContract
+    zaia.app/       App, AppBuilder, Router                  (assemble)
+    zaia.server/    WebApp, RequestContext, Middleware, Endpoint
+    zaia.shared/    ApiContract, ApiClient
+    example-counter-ssr/   exe · Component → HtmlBackend → HTML string (runs today)
+    example-hello-server/  exe · WebApp over z42.net.Http
     z42.workspace.toml
-  examples/         hello-server (server) · counter-web (client)
   docs/             description.md · rendering.md · app-host.md · dom-interop.md
-  scripts/build.sh
+  scripts/build.sh · scripts/run-example.sh
   ARCHITECTURE.md
 ```
 
 ## Build
 
-The packages compile together as a **z42 workspace** (workspace discovery is what resolves
-`web → renderer`, `app → renderer+web`, etc. — a flat `Z42_LIBS` does not, for custom
-packages). Member manifests use the **named** form `<name>.z42.toml`.
+Everything compiles together as **one z42 workspace** — framework libraries *and* example
+exes are all direct-child members of `packages/`. Workspace discovery is what resolves the
+inter-package types (`web → renderer`, an example `→ ui + renderer`, …); a flat `Z42_LIBS`
+does **not** resolve custom-package types, so the single workspace is the mechanism. Member
+manifests use the **named** form `<name>.z42.toml`.
 
 ```sh
-cd packages && z42 build --workspace --release   # → packages/dist/dist/zaia.*.zpkg  (all six green)
+cd packages && z42 build --workspace --release   # → packages/dist/dist/*.zpkg (9 members green)
+
+# run the SSR example (Z42_LIBS = the SDK's stdlib; siblings resolve from the dist dir):
+Z42_LIBS="$(dirname "$(z42 which)")/../libs" z42vm packages/dist/dist/counter-ssr.zpkg
+# → <div class="counter"><h1>Count: 0</h1><button>Increment</button></div>
 ```
 
-> **Open build item (M1):** a z42 workspace only accepts direct-child members, so an app in
-> `examples/` can't join the `packages/` workspace as-is. Wiring examples to consume the
-> built framework zpkgs (a single-workspace layout, or a package-install step once z42 grows
-> one) is the finishing step of M1. The framework packages themselves build green today.
+> **M1 layout note:** a z42 workspace only accepts direct-child members (`members = ["*"]`),
+> so examples live *inside* the workspace (`packages/example-*`) rather than a sibling
+> `examples/` tree — that's what lets them consume the framework via workspace discovery
+> instead of a flat lib path. This was M1's finishing step; it is done.
 
 ## Roadmap
 
 | Milestone | Contents | Gate |
 |-----------|----------|------|
-| **M1 — server + SSR spine** | `core`+`server`+`renderer`(HtmlBackend) build & example runs | stdlib HTTP (done) |
+| **M1 — server + SSR spine** ✅ | `core`+`server`+`renderer`(HtmlBackend) build & example runs (`counter-ssr` renders HTML) | stdlib HTTP (done) |
 | **M2 — shared contracts** | `shared` + typed `HttpClient` calls | z42.json (done) |
 | **M3 — client render** | `web`.`DomBackend` real over DOM builtins + `counter-web` | `add-wasm-dom-poc` in nightly |
 | **M4 — full-stack demo** | server + browser sharing contracts; SSR + hydration | M1–M3 |
 | **M5 — tooling** | `z42 new --template`, dev server with live reload | M1–M4 |
 
-M1/M2 are unblocked today; M3 is gated on the DOM primitives, whose contract is frozen in
-[docs/dom-interop.md](docs/dom-interop.md) so the layers above stay stable when it lands.
+M1 is done — the SSR example runs today. M2 is unblocked; M3 is gated on the DOM primitives,
+whose contract is frozen in [docs/dom-interop.md](docs/dom-interop.md) so the layers above
+stay stable when it lands.

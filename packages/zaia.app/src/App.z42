@@ -6,12 +6,14 @@
 //   zaia.ui        describes  (Component / VNode / State — fires UiDispatch)
 //   zaia.renderer  renders    (Renderer over a RenderBackend)
 //   zaia.app       assembles  (backend choice + change→render loop + lifecycle)
+//
+// `App.Mount` is the one-liner entry; `AppBuilder` is the configurable path (DI,
+// routing) — App.Mount just delegates to it.
 namespace Zaia.App;
 
 using Std;
 using Zaia.Ui;
 using Zaia.Renderer;
-using Zaia.Web;
 
 // Forwards description-change signals to the renderer. The only thing that knows
 // both the UiDispatch seam and the concrete Renderer — i.e. the assembly point.
@@ -24,11 +26,6 @@ class RenderTrigger : ChangeListener {
 public static class App {
     // Mount `root` under the selector in the browser and start the resident loop.
     public static void Mount(string selector, Component root) {
-        Renderer r = new Renderer(new DomBackend());
-
-        // Assemble the reactive loop: description signals a change → renderer re-renders.
-        UiDispatch.Listener = new RenderTrigger(r);
-
-        r.Mount(selector, root);
+        AppBuilder.Create().Root(selector, root).Run();
     }
 }

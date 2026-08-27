@@ -1,22 +1,43 @@
-// VNode — an immutable description of a UI node. Pure data: no rendering, no DOM.
+// VNode — an immutable-ish description of a UI node. Pure data: no rendering, no DOM.
 // The renderer consumes a tree of these; a backend materializes them.
+//
+// A node carries a tag, optional text, ordered children, a bag of string
+// attributes (class / id / href / value / type / placeholder …), and a bag of
+// event handlers keyed by event name ("click" / "input" / "submit" …). Fluent
+// builders (`Attr` / `Class` / `On` / `OnClick` / `Add`) return `this` so H
+// expressions read like markup.
 namespace Zaia.Ui;
 
 using Std;
 using Std.Collections;
 
 public class VNode {
-    public string Tag;             // "div" / "button" / … ; "" for a bare text node
-    public string Text;            // text content for text / leaf nodes
+    public string Tag;                          // "div" / "button" / … ; "" for a bare text node
+    public string Text;                         // text content for text / leaf nodes
     public List<VNode> Children;
-    public Action OnClickHandler;  // declared handler (the app assembles the response)
+    public Dictionary<string, string> Attributes;
+    public Dictionary<string, Action> Events;   // event name → non-capturing handler
 
     public VNode(string tag) {
         this.Tag = tag;
         this.Text = "";
         this.Children = new List<VNode>();
+        this.Attributes = new Dictionary<string, string>();
+        this.Events = new Dictionary<string, Action>();
     }
 
-    public VNode OnClick(Action handler) { this.OnClickHandler = handler; return this; }
+    // ── attributes ───────────────────────────────────────────────────────────
+    public VNode Attr(string name, string value) { this.Attributes.Set(name, value); return this; }
+    public VNode Class(string cls)               { return this.Attr("class", cls); }
+    public VNode Id(string id)                   { return this.Attr("id", id); }
+
+    // ── events ───────────────────────────────────────────────────────────────
+    // Handlers are non-capturing (Action) for now — the DOM PoC constraint. The
+    // app assembles what a fired handler does; the description only declares it.
+    public VNode On(string eventName, Action handler) { this.Events.Set(eventName, handler); return this; }
+    public VNode OnClick(Action handler)          { return this.On("click", handler); }
+    public VNode OnInput(Action handler)          { return this.On("input", handler); }
+
+    // ── children ─────────────────────────────────────────────────────────────
     public VNode Add(VNode child) { this.Children.Add(child); return this; }
 }
