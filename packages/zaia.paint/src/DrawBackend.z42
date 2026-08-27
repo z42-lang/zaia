@@ -1,0 +1,93 @@
+// DrawBackend — the seam that makes rasterization pluggable, the paint layer's
+// answer to eframe's renderer integration (egui) / nk_convert + your draw loop
+// (nuklear). A backend consumes a DrawList between Begin/End:
+//
+//   • TextDrawBackend  (here)      → a text dump of the commands; runs anywhere today
+//   • CanvasBackend    (zaia.web)  → HTML5 Canvas 2D via VM __canvas_* builtins (future)
+//   • a GPU backend    (future)    → tessellate + upload, like eframe's glow/wgpu
+//
+// Backends switch on DrawCmd.Kind (nuklear-style tagged commands).
+namespace Zaia.Paint;
+
+using Std;
+using Std.Collections;
+
+public abstract class DrawBackend {
+    public abstract void Begin(int width, int height);
+    public abstract void Submit(DrawList list);
+    public abstract void End();
+}
+
+// A reference backend that serializes commands to a deterministic text form — the
+// paint-layer analog of zaia.renderer's HtmlBackend: needs no GPU/canvas, so it runs
+// today for tests, goldens, and proving the widget layer composes.
+public class TextDrawBackend : DrawBackend {
+    private List<string> _lines;
+    private int _w;
+    private int _h;
+
+    public TextDrawBackend() { this._lines = new List<string>(); }
+
+    public override void Begin(int width, int height) {
+        this._w = width; this._h = height;
+        this._lines.Clear();
+        this._lines.Add("frame " + width.ToString() + "x" + height.ToString());
+    }
+
+    public override void Submit(DrawList list) {
+        int i = 0;
+        while (i < list.Cmds.Count) {
+            this._lines.Add(this._format(list.Cmds[i]));
+            i = i + 1;
+        }
+    }
+
+    public override void End() { }
+
+    // Serialize the whole frame (one command per line).
+    public string ToText() {
+        string outStr = "";
+        int i = 0;
+        while (i < this._lines.Count) {
+            outStr = outStr + this._lines[i];
+            if (i + 1 < this._lines.Count) { outStr = outStr + "\n"; }
+            i = i + 1;
+        }
+        return outStr;
+    }
+
+    private string _format(DrawCmd cmd) {
+        if (cmd.Kind == DrawKind.Rect) {
+            RectCmd r = (RectCmd)cmd;
+            return "rect " + _r(r.Rect) + " fill=" + r.Fill.ToHex() + " round=" + _n(r.Rounding);
+        }
+        if (cmd.Kind == DrawKind.Text) {
+            TextCmd t = (TextCmd)cmd;
+            return "text " + _n(t.X) + "," + _n(t.Y) + " \"" + t.Text + "\" " + t.Color.ToHex() + " size=" + _n(t.Size);
+        }
+        if (cmd.Kind == DrawKind.Line) {
+            LineCmd l = (LineCmd)cmd;
+            return "line " + _n(l.X0) + "," + _n(l.Y0) + " -> " + _n(l.X1) + "," + _n(l.Y1) + " " + l.Stroke.Color.ToHex();
+        }
+        if (cmd.Kind == DrawKind.Circle) {
+            CircleCmd c = (CircleCmd)cmd;
+            return "circle " + _n(c.Cx) + "," + _n(c.Cy) + " r=" + _n(c.R) + " fill=" + c.Fill.ToHex();
+        }
+        if (cmd.Kind == DrawKind.Clip) {
+            ClipCmd cl = (ClipCmd)cmd;
+            if (cl.Push) { return "clip push " + _r(cl.Rect); }
+            return "clip pop";
+        }
+        return "?";
+    }
+
+    private static string _r(Rect r) {
+        return _n(r.X) + "," + _n(r.Y) + " " + _n(r.W) + "x" + _n(r.H);
+    }
+
+    // Integer-round a coordinate for stable text output.
+    private static string _n(double v) {
+        long i = (long)v;
+        return i.ToString();
+    }
+}

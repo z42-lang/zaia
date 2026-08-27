@@ -1,0 +1,45 @@
+// widgets-demo — the retained widget toolkit (zaia.widgets) painted through the
+// paint layer (zaia.paint) via the TextDrawBackend. Builds a panel, dispatches a
+// simulated click, and dumps the frame's draw commands — proving layout + input +
+// paint compose end-to-end today, no canvas/GPU needed. The same tree would render
+// to a real Canvas 2D via zaia.web.CanvasBackend once the VM primitives ship.
+//
+//   ./scripts/run-example.sh widgets-demo
+namespace WidgetsDemo;
+
+using Std;
+using Std.IO;
+using Zaia.Paint;
+using Zaia.Widgets;
+
+void Main() {
+    Button increment = new Button("Increment");
+    // A block-body lambda infers as Func<unknown>; bind through an explicit Action
+    // local, then pass it to OnClicked (a cross-package delegate crosses as a method
+    // argument, not a field assignment — z42's delegate rules).
+    Action onIncrement = () => { Console.WriteLine("[callback] button clicked"); };
+    increment.OnClicked(onIncrement);
+
+    Checkbox enabled = new Checkbox("Enabled", true);
+    Slider amount = new Slider(0.0, 100.0, 42.0);
+
+    Panel panel = new Panel("Demo");
+    panel.Add(new Label("A retained widget toolkit, painted via zaia.paint."));
+    panel.Add(increment);
+    panel.Add(enabled);
+    panel.Add(amount);
+
+    Gui gui = new Gui(panel);
+    gui.Layout(360, 220);
+
+    // Dispatch a pointer-release over the button's laid-out bounds → fires OnClick.
+    InputState click = InputState.At(increment.Bounds.X + 10.0, increment.Bounds.Y + 6.0,
+                                     false, false, true);
+    bool changed = gui.Update(click);
+    Console.WriteLine("update changed=" + (changed ? "true" : "false"));
+
+    // Emit the frame and dump the draw-command list.
+    TextDrawBackend backend = new TextDrawBackend();
+    gui.Paint(backend);
+    Console.WriteLine(backend.ToText());
+}

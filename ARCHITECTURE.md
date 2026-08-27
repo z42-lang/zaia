@@ -58,10 +58,25 @@ Six packages, strict dependency direction (arrows point to dependencies):
 | `zaia.app` | wasm / client | `zaia.core`, `zaia.ui`, `zaia.renderer`, `zaia.web` | `App` · `AppBuilder` · `Router`/`RouteHandler` | 🟢 builds |
 | `zaia.server` | native | `zaia.core`, `z42.net`, `z42.json` | `WebApp` · `RequestContext` · `Middleware` · `Endpoint` | 🟢 builds |
 | `zaia.shared` | any | `zaia.core`, `z42.net`, `z42.json` | `ApiContract` (convention) · `ApiClient` (typed caller) | 🟢 builds |
+| `zaia.paint` | any | — | `DrawList` · `Painter` · `DrawCmd` · `DrawBackend` · `TextDrawBackend` · `InputState` · `Style` | 🟢 builds + runs |
+| `zaia.widgets` | any | `zaia.paint` | `Widget` · `Label`/`Button`/`Checkbox`/`Slider` · `Row`/`Column`/`Panel` · `Gui` | 🟢 builds + runs |
 
 Every seam above is **frozen** (this pass settled the abstraction layer before building
-features on it). Concrete behavior is filled behind these seams incrementally; the one
-still-stubbed body is `DomBackend`, gated on the VM DOM primitives.
+features on it). Concrete behavior is filled behind these seams incrementally; the two
+still-stubbed bodies are `DomBackend` and `CanvasBackend`, gated on their VM primitives.
+
+### Two front-ends, backend-agnostic rendering
+
+zaia has **two UI front-ends** sharing the "render through a seam" philosophy:
+
+- **Declarative** (`zaia.ui` → `zaia.renderer`): React/Blazor-style. `Component.Render()`
+  builds a retained `VNode` tree; `RenderBackend` mutates DOM nodes (`HtmlBackend` runs SSR
+  today; `DomBackend` awaits DOM primitives). Best for content/document UIs.
+- **Canvas widgets** (`zaia.paint` → `zaia.widgets`): a **retained widget toolkit** painted
+  through a **draw-command list**. `Gui` lays out persistent widget objects, hit-tests them
+  against `InputState`, and emits a `DrawList` to a `DrawBackend` (`TextDrawBackend` runs
+  today; `CanvasBackend` awaits VM `__canvas_*`). Best for tools/dashboards. See
+  [docs/paint.md](docs/paint.md) · [docs/widgets.md](docs/widgets.md).
 
 ### Design lineage
 
@@ -70,7 +85,11 @@ The seams deliberately mirror proven frameworks so they read as familiar, not in
 renderer abstraction** (a minimal imperative mutation API a diff can target, not the DOM
 API itself); `ServiceContainer` follows **ASP.NET Core `IServiceProvider`**; `WebApp`
 follows **ASP.NET Minimal APIs**; `Router` follows **ASP.NET routing**; the `ApiContract` +
-typed `ApiClient` seam follows **tRPC / Refit-style** typed clients over a shared DTO.
+typed `ApiClient` seam follows **tRPC / Refit-style** typed clients over a shared DTO. The
+`zaia.paint` layer borrows **egui**'s `Painter`/`epaint` and **nuklear**'s tagged
+command-buffer + `nk_input`/`nk_style`; `zaia.widgets` keeps their paint/input/style
+abstractions but is **retained** (persistent widget objects, callbacks) rather than
+immediate-mode — a deliberate divergence so it composes with zaia's retained model.
 
 All seven compile today with the **nightly** z42 SDK. The only thing not yet *runnable* on
 the client is the DOM output — the `DomBackend` throws until the VM DOM primitives ship
@@ -177,8 +196,11 @@ zaia/
     zaia.app/       App, AppBuilder, Router                  (assemble)
     zaia.server/    WebApp, RequestContext, Middleware, Endpoint
     zaia.shared/    ApiContract, ApiClient
+    zaia.paint/     DrawList, Painter, DrawCmd, DrawBackend, InputState, Style  (egui/nuklear-borrowed)
+    zaia.widgets/   Widget, Label/Button/Checkbox/Slider, Row/Column/Panel, Gui  (retained toolkit)
     example-counter-ssr/   exe · Component → HtmlBackend → HTML string (runs today)
     example-hello-server/  exe · WebApp over z42.net.Http
+    example-widgets/       exe · Panel of widgets → TextDrawBackend dump (runs today)
     z42.workspace.toml
   docs/             description.md · rendering.md · app-host.md · dom-interop.md
   scripts/build.sh · scripts/run-example.sh

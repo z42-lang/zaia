@@ -1,0 +1,88 @@
+// Widget — the base of the retained toolkit. Unlike egui/nuklear (immediate mode),
+// widgets here are *persistent objects*: you build the tree once, then each frame
+// Layout assigns bounds, HandleInput hit-tests against the InputState, and Paint
+// draws through the borrowed zaia.paint Painter. Interaction is wired via callbacks
+// (Action) and public state fields — never a per-frame Ui.button()->Response.
+//
+// Lifecycle each frame:  Layout(bounds, style) → HandleInput(input, style) → Paint(painter, style)
+namespace Zaia.Widgets;
+
+using Std;
+using Zaia.Paint;
+
+public abstract class Widget {
+    public Rect Bounds;   // assigned by the parent during Layout
+
+    // Desired size, given the active style (used by containers to stack/space children).
+    public abstract Vec2 Measure(Style style);
+
+    // Draw self through the painter, using Bounds set during Layout.
+    public abstract void Paint(Painter p, Style style);
+
+    // Position self (and, for containers, children) within `bounds`. Leaves just take
+    // the bounds; containers override to lay out their children.
+    public virtual void Layout(Rect bounds, Style style) { this.Bounds = bounds; }
+
+    // React to input; returns true if something changed (a click fired, a value moved).
+    // Leaves override; containers fan out to children.
+    public virtual bool HandleInput(InputState input, Style style) { return false; }
+
+    // Shared helper: estimated text width (monospace-ish approximation good enough for
+    // layout + the text backend; a real backend measures glyphs).
+    protected static double TextWidth(string text, double fontSize) {
+        return (text.Length + 0) * (fontSize * 0.6);
+    }
+}
+
+// Label — non-interactive text.
+public class Label : Widget {
+    public string Text;
+
+    public Label(string text) { this.Text = text; }
+
+    public override Vec2 Measure(Style style) {
+        return new Vec2(Widget.TextWidth(this.Text, style.FontSize), style.RowHeight);
+    }
+
+    public override void Paint(Painter p, Style style) {
+        double ty = this.Bounds.Y + (this.Bounds.H - style.FontSize) / 2.0;
+        p.Text(this.Bounds.X, ty, this.Text, style.Text, style.FontSize);
+    }
+}
+
+// Button — a clickable surface. Wire `OnClick` (a no-arg Action, passed from the app
+// like zaia.ui's VNode.OnClick) to run on release inside the bounds.
+public class Button : Widget {
+    public string Text;
+    public Action OnClick;
+    private bool _hover;
+
+    public Button(string text) { this.Text = text; }
+
+    // Set the click handler. Assigning the delegate here (inside zaia.widgets) rather
+    // than on the field from another package sidesteps z42's cross-zpkg delegate-assign
+    // limit — the caller passes the Action as an argument, as with zaia.ui's VNode.
+    public Button OnClicked(Action handler) { this.OnClick = handler; return this; }
+
+    public override Vec2 Measure(Style style) {
+        return new Vec2(Widget.TextWidth(this.Text, style.FontSize) + style.Padding * 2.0, style.RowHeight);
+    }
+
+    public override bool HandleInput(InputState input, Style style) {
+        this._hover = input.PointerIn(this.Bounds);
+        if (this._hover && input.PointerReleased) {
+            Action cb = this.OnClick;
+            if (cb != null) { cb(); }
+            return true;
+        }
+        return false;
+    }
+
+    public override void Paint(Painter p, Style style) {
+        Color fill = this._hover ? style.WidgetHover : style.Widget;
+        p.Rect(this.Bounds, fill, style.Rounding);
+        double tx = this.Bounds.X + style.Padding;
+        double ty = this.Bounds.Y + (this.Bounds.H - style.FontSize) / 2.0;
+        p.Text(tx, ty, this.Text, style.Text, style.FontSize);
+    }
+}

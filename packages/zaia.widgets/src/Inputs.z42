@@ -1,0 +1,93 @@
+// Checkbox & Slider — stateful input widgets. Their value lives in a public field
+// you read after Update (retained style); an optional no-arg OnChanged callback fires
+// on change. No &mut refs (z42 has none) and no immediate Response — the persistent
+// object holds the state.
+namespace Zaia.Widgets;
+
+using Std;
+using Zaia.Paint;
+
+public class Checkbox : Widget {
+    public string Label;
+    public bool Checked;
+    public Action OnChanged;
+    private bool _hover;
+
+    public Checkbox(string label, bool initial) { this.Label = label; this.Checked = initial; }
+
+    // Set the change handler (assigned inside zaia.widgets; see Button.OnClicked).
+    public Checkbox OnToggled(Action handler) { this.OnChanged = handler; return this; }
+
+    public override Vec2 Measure(Style style) {
+        double w = style.RowHeight + style.Spacing + Widget.TextWidth(this.Label, style.FontSize);
+        return new Vec2(w, style.RowHeight);
+    }
+
+    public override bool HandleInput(InputState input, Style style) {
+        this._hover = input.PointerIn(this.Bounds);
+        if (this._hover && input.PointerReleased) {
+            this.Checked = !this.Checked;
+            Action cb = this.OnChanged;
+            if (cb != null) { cb(); }
+            return true;
+        }
+        return false;
+    }
+
+    public override void Paint(Painter p, Style style) {
+        double box = style.RowHeight - 6.0;
+        double bx = this.Bounds.X;
+        double by = this.Bounds.Y + (this.Bounds.H - box) / 2.0;
+        Rect boxRect = new Rect(bx, by, box, box);
+        p.Rect(boxRect, this._hover ? style.WidgetHover : style.Widget, style.Rounding);
+        if (this.Checked) {
+            double inset = 4.0;
+            p.RectFilled(new Rect(bx + inset, by + inset, box - inset * 2.0, box - inset * 2.0), style.Accent);
+        }
+        double tx = bx + box + style.Spacing;
+        double ty = this.Bounds.Y + (this.Bounds.H - style.FontSize) / 2.0;
+        p.Text(tx, ty, this.Label, style.Text, style.FontSize);
+    }
+}
+
+public class Slider : Widget {
+    public double Min;
+    public double Max;
+    public double Value;
+    public Action OnChanged;
+
+    public Slider(double min, double max, double value) {
+        this.Min = min; this.Max = max; this.Value = value;
+    }
+
+    // Set the change handler (assigned inside zaia.widgets; see Button.OnClicked).
+    public Slider OnMoved(Action handler) { this.OnChanged = handler; return this; }
+
+    public override Vec2 Measure(Style style) { return new Vec2(160.0, style.RowHeight); }
+
+    public override bool HandleInput(InputState input, Style style) {
+        if (input.PointerIn(this.Bounds) && input.PointerDown) {
+            double t = (input.PointerX - this.Bounds.X) / this.Bounds.W;
+            if (t < 0.0) { t = 0.0; }
+            if (t > 1.0) { t = 1.0; }
+            this.Value = this.Min + t * (this.Max - this.Min);
+            Action cb = this.OnChanged;
+            if (cb != null) { cb(); }
+            return true;
+        }
+        return false;
+    }
+
+    public override void Paint(Painter p, Style style) {
+        double cy = this.Bounds.Y + this.Bounds.H / 2.0;
+        double trackH = 4.0;
+        Rect track = new Rect(this.Bounds.X, cy - trackH / 2.0, this.Bounds.W, trackH);
+        p.RectFilled(track, style.Widget);
+
+        double t = 0.0;
+        if (this.Max > this.Min) { t = (this.Value - this.Min) / (this.Max - this.Min); }
+        double knobX = this.Bounds.X + t * this.Bounds.W;
+        p.RectFilled(new Rect(this.Bounds.X, cy - trackH / 2.0, t * this.Bounds.W, trackH), style.Accent);
+        p.Circle(knobX, cy, style.RowHeight / 2.0 - 4.0, style.Accent);
+    }
+}
