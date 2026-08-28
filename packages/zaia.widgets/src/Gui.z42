@@ -1,0 +1,51 @@
+// Gui — the retained composition root that ties the toolkit to the paint layer.
+// Build the widget tree once, then per frame: Layout (assign bounds) → Update
+// (dispatch input) → Paint (emit a DrawList to a DrawBackend). This is the retained
+// counterpart to egui's `Context::run`, but the widget objects persist across frames
+// instead of being re-emitted.
+//
+//   var gui = new Gui(new Panel("Demo").Add(new Button("Go")));
+//   gui.Layout(320, 200);
+//   gui.Update(InputState.At(40, 60, true, false, true));   // a click
+//   gui.Paint(backend);
+namespace Zaia.Widgets;
+
+using Std;
+using Zaia.Paint;
+
+public class Gui {
+    public Widget Root;
+    public Style Theme;    // named Theme, not Style — a field named `Style` would shadow
+                           // the `Style` type and break the static `Style.Dark()` call.
+    private int _w;
+    private int _h;
+
+    public Gui(Widget root) {
+        this.Root = root;
+        this.Theme = Style.Dark();
+        this._w = 0;
+        this._h = 0;
+    }
+
+    // Assign bounds top-down over a `width`x`height` surface.
+    public void Layout(int width, int height) {
+        this._w = width;
+        this._h = height;
+        this.Root.Layout(new Rect(0.0, 0.0, width, height), this.Theme);
+    }
+
+    // Dispatch one input frame; returns true if any widget changed.
+    public bool Update(InputState input) {
+        return this.Root.HandleInput(input, this.Theme);
+    }
+
+    // Emit the frame's draw commands to `backend`.
+    public void Paint(DrawBackend backend) {
+        DrawList list = new DrawList();
+        Painter p = new Painter(list);
+        backend.Begin(this._w, this._h);
+        this.Root.Paint(p, this.Theme);
+        backend.Submit(list);
+        backend.End();
+    }
+}

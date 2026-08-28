@@ -8,6 +8,7 @@ include = ["src/**/*.z42"]
 
 [dependencies]
 "zaia.renderer" = "0.1.0"
+"zaia.paint"    = "0.1.0"
 
 # The DOM backend targets the VM DOM primitives added by the z42 change
 # `add-wasm-dom-poc` (ships in a nightly SDK). It compiles today with stubbed

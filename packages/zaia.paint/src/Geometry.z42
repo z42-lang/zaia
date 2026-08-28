@@ -1,0 +1,66 @@
+// Geometry & color — the backend-agnostic value types the paint layer speaks in.
+// Modeled on egui's emath/ecolor (Vec2/Rect/Color32) and nuklear's nk_vec2/nk_rect/
+// nk_color. Coordinates are `double` (logical pixels); colors are 8-bit RGBA.
+namespace Zaia.Paint;
+
+using Std;
+
+// A 2D vector / point (egui splits Vec2/Pos2; we use one type for both).
+public class Vec2 {
+    public double X;
+    public double Y;
+    public Vec2(double x, double y) { this.X = x; this.Y = y; }
+}
+
+// An axis-aligned rectangle (x,y = top-left; w,h = size).
+public class Rect {
+    public double X;
+    public double Y;
+    public double W;
+    public double H;
+
+    public Rect(double x, double y, double w, double h) {
+        this.X = x; this.Y = y; this.W = w; this.H = h;
+    }
+
+    public double Right()  { return this.X + this.W; }
+    public double Bottom() { return this.Y + this.H; }
+
+    // True if (px,py) is inside this rect (half-open on the far edges).
+    public bool Contains(double px, double py) {
+        return px >= this.X && px < this.X + this.W
+            && py >= this.Y && py < this.Y + this.H;
+    }
+}
+
+// 8-bit RGBA color.
+public class Color {
+    public int R;
+    public int G;
+    public int B;
+    public int A;
+
+    public Color(int r, int g, int b, int a) { this.R = r; this.G = g; this.B = b; this.A = a; }
+
+    public static Color Rgb(int r, int g, int b)          { return new Color(r, g, b, 255); }
+    public static Color Rgba(int r, int g, int b, int a)  { return new Color(r, g, b, a); }
+
+    // "#rrggbbaa" — deterministic serialization for the text backend / goldens.
+    public string ToHex() {
+        return "#" + _hex2(this.R) + _hex2(this.G) + _hex2(this.B) + _hex2(this.A);
+    }
+
+    private static string _hex2(int v) {
+        string digits = "0123456789abcdef";
+        int hi = (v / 16) % 16;
+        int lo = v % 16;
+        return digits.Substring(hi, 1) + digits.Substring(lo, 1);
+    }
+}
+
+// A line/border stroke: width + color.
+public class Stroke {
+    public double Width;
+    public Color Color;
+    public Stroke(double width, Color color) { this.Width = width; this.Color = color; }
+}

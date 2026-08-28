@@ -1,0 +1,52 @@
+// Style — theming for the widget layer, the analog of egui's Visuals and nuklear's
+// nk_style: the colors, spacing, and metrics widgets read while painting. A Style is
+// passed down through layout/paint so a widget never hard-codes a color.
+namespace Zaia.Paint;
+
+using Std;
+
+public class Style {
+    // colors
+    public Color Bg;            // window/background
+    public Color Panel;         // panel surface
+    public Color Widget;        // idle widget surface
+    public Color WidgetHover;   // hovered widget surface
+    public Color WidgetActive;  // pressed/active widget surface
+    public Color Text;          // foreground text
+    public Color Accent;        // selection / filled slider / checkmark
+
+    // metrics (logical px)
+    public double Rounding;     // corner radius
+    public double Spacing;      // gap between stacked widgets
+    public double Padding;      // inner padding
+    public double FontSize;     // text size
+    public double RowHeight;    // default widget height
+
+    public Style() { }
+
+    public static Style Dark() {
+        Style s = new Style();
+        s.Bg           = Color.Rgb(30, 30, 34);
+        s.Panel        = Color.Rgb(42, 42, 48);
+        s.Widget       = Color.Rgb(60, 60, 68);
+        s.WidgetHover  = Color.Rgb(78, 78, 88);
+        s.WidgetActive = Color.Rgb(96, 96, 110);
+        s.Text         = Color.Rgb(230, 230, 235);
+        s.Accent       = Color.Rgb(240, 170, 60);
+        s.Rounding = 4.0; s.Spacing = 6.0; s.Padding = 8.0; s.FontSize = 14.0; s.RowHeight = 26.0;
+        return s;
+    }
+
+    public static Style Light() {
+        Style s = new Style();
+        s.Bg           = Color.Rgb(245, 245, 247);
+        s.Panel        = Color.Rgb(255, 255, 255);
+        s.Widget       = Color.Rgb(226, 226, 230);
+        s.WidgetHover  = Color.Rgb(210, 210, 216);
+        s.WidgetActive = Color.Rgb(196, 196, 204);
+        s.Text         = Color.Rgb(24, 24, 28);
+        s.Accent       = Color.Rgb(210, 140, 30);
+        s.Rounding = 4.0; s.Spacing = 6.0; s.Padding = 8.0; s.FontSize = 14.0; s.RowHeight = 26.0;
+        return s;
+    }
+}

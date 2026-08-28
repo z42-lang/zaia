@@ -1,0 +1,169 @@
+// Containers — Row (horizontal), Column (vertical), Panel (a titled surface that
+// stacks children). These own the layout math the browser gives the declarative
+// stack for free: a container assigns each child's Bounds, borrowing nuklear's
+// row-based model (equal-share rows) and egui's cursor stacking.
+namespace Zaia.Widgets;
+
+using Std;
+using Std.Collections;
+using Zaia.Paint;
+
+// Vertical stack of children, transparent (no background).
+public class Column : Widget {
+    public List<Widget> Children;
+
+    public Column() { this.Children = new List<Widget>(); }
+    public Column Add(Widget w) { this.Children.Add(w); return this; }
+
+    public override Vec2 Measure(Style style) {
+        double w = 0.0;
+        double h = 0.0;
+        int i = 0;
+        while (i < this.Children.Count) {
+            Vec2 m = this.Children[i].Measure(style);
+            if (m.X > w) { w = m.X; }
+            h = h + m.Y;
+            if (i + 1 < this.Children.Count) { h = h + style.Spacing; }
+            i = i + 1;
+        }
+        return new Vec2(w, h);
+    }
+
+    public override void Layout(Rect bounds, Style style) {
+        this.Bounds = bounds;
+        double cursorY = bounds.Y;
+        int i = 0;
+        while (i < this.Children.Count) {
+            Widget c = this.Children[i];
+            double ch = c.Measure(style).Y;
+            c.Layout(new Rect(bounds.X, cursorY, bounds.W, ch), style);
+            cursorY = cursorY + ch + style.Spacing;
+            i = i + 1;
+        }
+    }
+
+    public override bool HandleInput(InputState input, Style style) {
+        bool changed = false;
+        int i = 0;
+        while (i < this.Children.Count) {
+            if (this.Children[i].HandleInput(input, style)) { changed = true; }
+            i = i + 1;
+        }
+        return changed;
+    }
+
+    public override void Paint(Painter p, Style style) {
+        int i = 0;
+        while (i < this.Children.Count) { this.Children[i].Paint(p, style); i = i + 1; }
+    }
+}
+
+// Horizontal row: children share the width equally (nuklear nk_layout_row_dynamic).
+public class Row : Widget {
+    public List<Widget> Children;
+
+    public Row() { this.Children = new List<Widget>(); }
+    public Row Add(Widget w) { this.Children.Add(w); return this; }
+
+    public override Vec2 Measure(Style style) {
+        double w = 0.0;
+        double h = 0.0;
+        int i = 0;
+        while (i < this.Children.Count) {
+            Vec2 m = this.Children[i].Measure(style);
+            w = w + m.X;
+            if (i + 1 < this.Children.Count) { w = w + style.Spacing; }
+            if (m.Y > h) { h = m.Y; }
+            i = i + 1;
+        }
+        return new Vec2(w, h);
+    }
+
+    public override void Layout(Rect bounds, Style style) {
+        this.Bounds = bounds;
+        int n = this.Children.Count;
+        if (n == 0) { return; }
+        double each = (bounds.W - style.Spacing * ((n - 1) + 0)) / (n + 0);
+        int i = 0;
+        while (i < n) {
+            double x = bounds.X + (i + 0) * (each + style.Spacing);
+            this.Children[i].Layout(new Rect(x, bounds.Y, each, bounds.H), style);
+            i = i + 1;
+        }
+    }
+
+    public override bool HandleInput(InputState input, Style style) {
+        bool changed = false;
+        int i = 0;
+        while (i < this.Children.Count) {
+            if (this.Children[i].HandleInput(input, style)) { changed = true; }
+            i = i + 1;
+        }
+        return changed;
+    }
+
+    public override void Paint(Painter p, Style style) {
+        int i = 0;
+        while (i < this.Children.Count) { this.Children[i].Paint(p, style); i = i + 1; }
+    }
+}
+
+// Panel — a titled surface (window) that stacks children vertically with padding.
+public class Panel : Widget {
+    public string Title;
+    public List<Widget> Children;
+
+    public Panel(string title) { this.Title = title; this.Children = new List<Widget>(); }
+    public Panel Add(Widget w) { this.Children.Add(w); return this; }
+
+    private double _titleH(Style style) { return this.Title.Length > 0 ? style.RowHeight : 0.0; }
+
+    public override Vec2 Measure(Style style) {
+        double w = 0.0;
+        double h = this._titleH(style) + style.Padding * 2.0;
+        int i = 0;
+        while (i < this.Children.Count) {
+            Vec2 m = this.Children[i].Measure(style);
+            if (m.X > w) { w = m.X; }
+            h = h + m.Y;
+            if (i + 1 < this.Children.Count) { h = h + style.Spacing; }
+            i = i + 1;
+        }
+        return new Vec2(w + style.Padding * 2.0, h);
+    }
+
+    public override void Layout(Rect bounds, Style style) {
+        this.Bounds = bounds;
+        double x = bounds.X + style.Padding;
+        double w = bounds.W - style.Padding * 2.0;
+        double cursorY = bounds.Y + this._titleH(style) + style.Padding;
+        int i = 0;
+        while (i < this.Children.Count) {
+            Widget c = this.Children[i];
+            double ch = c.Measure(style).Y;
+            c.Layout(new Rect(x, cursorY, w, ch), style);
+            cursorY = cursorY + ch + style.Spacing;
+            i = i + 1;
+        }
+    }
+
+    public override bool HandleInput(InputState input, Style style) {
+        bool changed = false;
+        int i = 0;
+        while (i < this.Children.Count) {
+            if (this.Children[i].HandleInput(input, style)) { changed = true; }
+            i = i + 1;
+        }
+        return changed;
+    }
+
+    public override void Paint(Painter p, Style style) {
+        p.Rect(this.Bounds, style.Panel, style.Rounding);
+        if (this.Title.Length > 0) {
+            double ty = this.Bounds.Y + (this._titleH(style) - style.FontSize) / 2.0;
+            p.Text(this.Bounds.X + style.Padding, ty, this.Title, style.Text, style.FontSize);
+        }
+        int i = 0;
+        while (i < this.Children.Count) { this.Children[i].Paint(p, style); i = i + 1; }
+    }
+}

@@ -1,0 +1,31 @@
+// CanvasBackend — the browser DrawBackend: rasterizes a zaia.paint DrawList onto an
+// HTML5 Canvas 2D context via VM __canvas_* builtins (fillRect / fillText / stroke /
+// clip). Those primitives are a z42 language/VM change (sibling to add-wasm-dom-poc,
+// and simpler — draw calls, no node graph); until they ship the operations throw, so
+// the widget stack compiles but a live canvas render fails fast with a clear message.
+// When they land, each command maps to one __canvas_* call and nothing above this
+// backend changes (Gui/Widget/Painter are already written to the seam).
+namespace Zaia.Web;
+
+using Std;
+using Std.Collections;
+using Zaia.Paint;
+
+public class CanvasBackend : DrawBackend {
+    public override void Begin(int width, int height) { _nyi(); }
+
+    public override void Submit(DrawList list) {
+        // Real impl (once primitives exist): switch on each DrawCmd.Kind and issue the
+        // matching __canvas_* call — RectCmd → fillRect, TextCmd → fillText, LineCmd →
+        // stroke, ClipCmd → save/clip/restore. Stubbed until then.
+        _nyi();
+    }
+
+    public override void End() { _nyi(); }
+
+    private static void _nyi() {
+        throw new Exception(
+            "zaia.web CanvasBackend needs the VM canvas primitives (__canvas_*); "
+            + "not present in this SDK yet");
+    }
+}

@@ -1,0 +1,10 @@
+[project]
+name = "zaia.widgets"
+version = "0.1.0"
+kind = "lib"
+
+[sources]
+include = ["src/**/*.z42"]
+
+[dependencies]
+"zaia.paint" = "0.1.0"
