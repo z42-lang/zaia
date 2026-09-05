@@ -1,0 +1,123 @@
+namespace Zaia.App;
+
+using Std;
+using Zaia.Core;
+using Zaia.Ui;
+using Zaia.Renderer;
+using Zaia.Shared;
+
+/// Where the browser currently is, and how to move it — as a seam.
+///
+/// Reading `location.pathname` and calling `history.pushState` are two more VM
+/// builtins that do not exist yet (`__history_*`, see docs/design/dom-interop.md).
+/// Rather than block the router on them, the router depends on this interface
+/// and the browser implementation is one small class behind it. A test drives
+/// the router with `MemoryLocation` and never needs a browser.
+public interface ILocation {
+    /// The current path, without query or fragment.
+    string Path();
+
+    /// Push `path` onto history without a page load.
+    void Push(string path);
+
+    /// Register `listener` for back/forward navigation.
+    void OnPopState(IChangeListener listener);
+}
+
+/// An `ILocation` backed by a field. The router's test double, and the
+/// server's stand-in when it needs to resolve a path with no browser.
+public class MemoryLocation : ILocation {
+    private string _path;
+    private IChangeListener _listener;
+
+    public MemoryLocation(string path) {
+        this._path = path;
+        this._listener = null;
+    }
+
+    public string Path() { return this._path; }
+
+    public void Push(string path) {
+        this._path = path;
+        IChangeListener l = this._listener;
+        if (l != null) l.OnChange();
+    }
+
+    public void OnPopState(IChangeListener listener) { this._listener = listener; }
+}
+
+/// Client-side routing over the **same `PageTable` the server rendered from**.
+///
+/// The router resolves the current path to a component and mounts it. On
+/// navigation it resolves again and remounts. Because the table is shared, the
+/// component the browser mounts for a URL is by construction the component the
+/// server rendered for it — the property that makes hydration a takeover
+/// rather than a reimplementation.
+///
+///     Router r = Router.Start(pages, "#app", new BrowserLocation());
+///     r.Navigate("/docs/intro");
+///
+/// **Remount, not hydrate.** `Start` currently rebuilds the mount point rather
+/// than adopting the server's existing DOM. True hydration — walking the
+/// server's nodes and binding handlers to them without recreating them — needs
+/// the reconciler to diff against existing host nodes, which is the same work
+/// as keyed diffing in `Renderer`. Both land together; nothing in this file
+/// changes when they do.
+public class Router : IChangeListener {
+    private readonly PageTable _pages;
+    private readonly string _selector;
+    private readonly ILocation _location;
+    private readonly IRenderBackend _backend;
+    private App _current;
+
+    private Router(PageTable pages, string selector, ILocation location, IRenderBackend backend) {
+        this._pages    = pages;
+        this._selector = selector;
+        this._location = location;
+        this._backend  = backend;
+        this._current  = null;
+    }
+
+    /// Start routing with an explicit backend and location — the testable form.
+    public static Router StartWith(PageTable pages, string selector, ILocation location, IRenderBackend backend) {
+        Router r = new Router(pages, selector, location, backend);
+        location.OnPopState(r);
+        r.Render();
+        return r;
+    }
+
+    /// Navigate to `path`: push history, then re-render.
+    public void Navigate(string path) {
+        this._location.Push(path);
+        this.Render();
+    }
+
+    /// Back/forward moved the location — re-render at the new path.
+    public void OnChange() {
+        this.Render();
+    }
+
+    /// The component currently mounted, or null when the path did not match.
+    public Component Current {
+        get { return this._current == null ? null : this._currentPage; }
+    }
+
+    private Component _currentPage;
+
+    private void Render() {
+        PageMatch m = this._pages.Resolve(this._location.Path());
+        if (!m.Found) {
+            this.Teardown();
+            this._currentPage = null;
+            return;
+        }
+        this.Teardown();
+        this._currentPage = m.Page;
+        this._current = App.MountWith(this._backend, this._selector, m.Page);
+    }
+
+    private void Teardown() {
+        App a = this._current;
+        if (a != null) { a.Dispose(); this._current = null; }
+    }
+}

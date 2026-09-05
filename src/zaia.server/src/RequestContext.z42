@@ -1,0 +1,176 @@
+namespace Zaia.Server;
+
+using Std;
+using Std.Collections;
+using Std.Encoding;
+using Std.Net.Http;
+using Std.Uri;
+using Std.Json;
+using Zaia.Core;
+
+/// Everything a handler is given, and everything it can answer with.
+///
+/// One object per request, created by `WebApp` and handed to the matched
+/// handler. It wraps `Std.Net.Http.HttpServerContext` rather than replacing it
+/// — `Raw` is public precisely so an application that needs the stdlib's full
+/// surface is never blocked by this class not having wrapped something.
+///
+/// **Responses are imperative** — `ctx.Json(200, x)`, not `return Ok(x)`. That
+/// is a deliberate concession to the language: a handler is a block lambda, and
+/// z42 does not yet infer a return type through one, so a handler that returned
+/// a response would not type-check at the call site. Handlers therefore return
+/// `void` and send. When the inference gap closes this can grow a
+/// response-returning overload without breaking the imperative one.
+public class RequestContext {
+    /// The stdlib context this wraps. Use it for anything not surfaced here.
+    public HttpServerContext Raw;
+
+    /// The route match that selected this handler. Set by `WebApp` just
+    /// before dispatch; a miss-shaped `RouteMatch` until then.
+    ///
+    /// The whole `RouteMatch` is held rather than its parameter dictionary
+    /// because a `Dictionary<string, string>` built in `zaia.core` does not
+    /// unify with one declared here: z42 does not preserve the `string` /
+    /// `String` spelling through zpkg metadata in generic argument position,
+    /// so the assignment is rejected across the package boundary. Passing the
+    /// nominal type across instead avoids the instantiation entirely — and
+    /// avoids copying the bag on every request.
+    public RouteMatch Match;
+
+    /// Application services registered on the `WebApp` at startup.
+    public ServiceContainer Services;
+
+    private string _path;
+    private Dictionary<string, string> _query;
+    private bool _queryParsed;
+
+    public RequestContext(HttpServerContext raw, ServiceContainer services) {
+        this.Raw         = raw;
+        this.Services    = services;
+        this.Match       = RouteMatch.Miss();
+        this._query      = new Dictionary<string, string>();
+        this._queryParsed = false;
+        this._path       = RequestContext.PathOf(raw.Request.Url);
+    }
+
+    // ── Request ───────────────────────────────────────────────────────────
+
+    /// The request method — compare against `HttpVerb.Get` and friends.
+    public string Method { get { return this.Raw.Request.Method; } }
+
+    /// The request path with the query string removed. Always starts with "/".
+    public string Path { get { return this._path; } }
+
+    /// A captured route value, or "" when the route has no such capture.
+    public string Route(string name) {
+        return this.Match.Get(name);
+    }
+
+    /// A query-string value, or "" when absent. Parsed on first use.
+    public string Query(string name) {
+        if (!this._queryParsed) {
+            this._query      = RequestContext.ParseQuery(this.Raw.Request.Url);
+            this._queryParsed = true;
+        }
+        return this._query.GetValueOrDefault(name, "");
+    }
+
+    public string Header(string name) {
+        return this.Raw.Request.Headers.Get(name) ?? "";
+    }
+
+    /// The raw request body. Empty when there is none.
+    public byte[] Body() {
+        byte[] b = this.Raw.Request.Body;
+        return b == null ? new byte[0] : b;
+    }
+
+    public string BodyText() {
+        byte[] b = this.Body();
+        return Utf8.GetString(b);
+    }
+
+    /// Deserialize the JSON body into `T`.
+    /// Throws on malformed input — a malformed body is a client error the
+    /// caller should catch and turn into a 400, not a value to branch on.
+    public T BodyJson<T>() {
+        return JsonSerializer.Deserialize<T>(this.BodyText());
+    }
+
+    // ── Response ──────────────────────────────────────────────────────────
+
+    public void Text(int status, string body) {
+        this.Raw.SendText(status, body);
+    }
+
+    /// Send `body` as `text/html`.
+    public void Html(int status, string body) {
+        this.Raw.SendBytes(status, "", Utf8.GetBytes(body), "text/html; charset=utf-8");
+    }
+
+    /// Serialize `value` to JSON and send it.
+    public void Json<T>(int status, T value) {
+        this.Raw.SendJson(status, JsonSerializer.Serialize<T>(value));
+    }
+
+    /// Send a pre-serialized JSON document.
+    public void JsonRaw(int status, string json) {
+        this.Raw.SendJson(status, json);
+    }
+
+    public void Status(int status) {
+        this.Raw.SendStatus(status);
+    }
+
+    public void NotFound() {
+        this.Raw.SendText(404, "Not Found");
+    }
+
+    /// True once something has been sent. `WebApp` checks this so a middleware
+    /// that answers short-circuits the pipeline.
+    public bool Answered { get { return this.Raw.ResponseSent; } }
+
+    // ── URL helpers ───────────────────────────────────────────────────────
+
+    /// Extract the path from a request URL. `HttpRequest.Url` is a full
+    /// absolute URL on the server side, but origin-form ("/a/b") shows up in
+    /// tests and proxies, so both are accepted.
+    // `IndexOf("?")`, not `IndexOf('?')`: the char overload exists but
+    // mis-dispatches at runtime to the string one. See docs/design/language-surface.md.
+    private static string PathOf(string url) {
+        if (url.StartsWith("/")) {
+            int q = url.IndexOf("?");
+            return q < 0 ? url : url.Substring(0, q);
+        }
+        Uri u = Uri.Parse(url);
+        string p = u.GetPath();
+        return p.Length == 0 ? "/" : p;
+    }
+
+    private static Dictionary<string, string> ParseQuery(string url) {
+        Dictionary<string, string> outMap = new Dictionary<string, string>();
+        int q = url.IndexOf("?");
+        if (q < 0) return outMap;
+        string qs = url.Substring(q + 1);
+        int h = qs.IndexOf("#");
+        if (h >= 0) qs = qs.Substring(0, h);
+
+        int i = 0;
+        string cur = "";
+        while (i <= qs.Length) {
+            if (i == qs.Length || qs.CharAt(i) == '&') {
+                if (cur.Length > 0) {
+                    int eq = cur.IndexOf("=");
+                    if (eq < 0) outMap.Set(UriCodec.Decode(cur), "");
+                    else outMap.Set(UriCodec.Decode(cur.Substring(0, eq)),
+                                    UriCodec.Decode(cur.Substring(eq + 1)));
+                }
+                cur = "";
+            } else {
+                cur = cur + qs.CharAt(i);
+            }
+            i = i + 1;
+        }
+        return outMap;
+    }
+}

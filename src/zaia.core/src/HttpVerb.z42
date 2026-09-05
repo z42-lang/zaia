@@ -1,0 +1,17 @@
+namespace Zaia.Core;
+
+/// HTTP method names, as constants rather than an enum.
+///
+/// `Std.Net.Http.HttpRequest.Method` is a `string` (it must be — custom verbs
+/// are legal), and a shared `ApiContract` declares its verb as a static field
+/// readable from both ends. Constants keep those three uses on one spelling
+/// without a conversion at every boundary.
+public static class HttpVerb {
+    public static string Get     = "GET";
+    public static string Head    = "HEAD";
+    public static string Post    = "POST";
+    public static string Put     = "PUT";
+    public static string Patch   = "PATCH";
+    public static string Delete  = "DELETE";
+    public static string Options = "OPTIONS";
+}

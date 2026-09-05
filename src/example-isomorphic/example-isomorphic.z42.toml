@@ -1,0 +1,17 @@
+[project]
+name        = "example-isomorphic"
+kind        = "exe"
+entry       = "Example.Isomorphic.Main"
+version     = "0.1.0"
+license     = "MIT"
+description = "One PageTable, resolved by the server and by the client Router — proving both ends agree by construction."
+
+[dependencies]
+"zaia.core"     = "0.1.0"
+"zaia.ui"       = "0.1.0"
+"zaia.renderer" = "0.1.0"
+"zaia.shared"   = "0.1.0"
+"zaia.app"      = "0.1.0"
+
+[sources]
+include = ["src/**/*.z42"]

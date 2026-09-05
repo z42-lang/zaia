@@ -1,0 +1,55 @@
+namespace Zaia.Ui;
+
+using Std;
+using Std.Collections;
+
+/// Receives "something changed, the tree may need re-rendering".
+///
+/// A **nominal interface**, deliberately, where a delegate would be the
+/// obvious choice. Two reasons:
+///
+///  1. It keeps the dependency arrow straight. `zaia.ui` describes; it must
+///     not know a renderer exists. A named contract lets `zaia.app` register
+///     itself as the listener without `zaia.ui` importing anything.
+///  2. A named type crosses a zpkg boundary cleanly. A delegate value handed
+///     across packages is harder to keep stable than a class implementing a
+///     published interface.
+public interface IChangeListener {
+    void OnChange();
+}
+
+/// The change bus between the description layer and whoever renders it.
+///
+/// **Client-only.** `zaia.app` subscribes exactly one listener when it mounts,
+/// and the reactive loop is that listener. On the server nothing subscribes,
+/// so `Signal()` is a no-op and server-side rendering stays a pure function of
+/// the tree it is handed — which is what makes it safe to render two requests
+/// concurrently on two threads.
+public static class UiDispatch {
+    private static List<IChangeListener> Listeners = new List<IChangeListener>();
+
+    /// Register a listener. Called once, by the composition root.
+    public static void Subscribe(IChangeListener listener) {
+        UiDispatch.Listeners.Add(listener);
+    }
+
+    public static void Unsubscribe(IChangeListener listener) {
+        UiDispatch.Listeners.Remove(listener);
+    }
+
+    /// Drop every listener. The composition root calls this on teardown, and
+    /// tests call it between cases so a leaked subscription cannot leak into
+    /// the next one.
+    public static void Reset() {
+        UiDispatch.Listeners.Clear();
+    }
+
+    /// Announce a change. Synchronous and re-entrant-unsafe by design: a
+    /// listener that mutates state during `OnChange` re-enters this method.
+    /// The composition root is responsible for coalescing, not this bus.
+    public static void Signal() {
+        List<IChangeListener> ls = UiDispatch.Listeners;
+        int i = 0;
+        while (i < ls.Count) { ls[i].OnChange(); i = i + 1; }
+    }
+}

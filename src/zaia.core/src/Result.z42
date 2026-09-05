@@ -1,0 +1,42 @@
+namespace Zaia.Core;
+
+using Std;
+
+/// A success-or-failure carrier for application logic.
+///
+/// z42's own `Result<T, E>` + `?` propagation lands in 0.7; until then the
+/// language offers only exceptions. `Result<T>` is the framework's stand-in
+/// for the *expected* failure — a lookup that missed, a validation that
+/// failed — so those paths do not pay for a throw. Genuinely exceptional
+/// conditions still throw.
+///
+/// This type is deliberately shaped like the eventual language type so the
+/// migration is mechanical: when `Result<T, E>` lands, `Result<T>` becomes
+/// `Result<T, string>` and the call sites keep their shape.
+public class Result<T> {
+    private readonly T _value;
+    private readonly string? _error;
+
+    private Result(T value, string? error) {
+        this._value = value;
+        this._error = error;
+    }
+
+    public static Result<T> Ok(T value)     => new Result<T>(value, null);
+    public static Result<T> Err(string why) => new Result<T>(default(T), why);
+
+    public bool IsOk  { get { return this._error == null; } }
+    public bool IsErr { get { return this._error != null; } }
+
+    /// The error message. Empty when the result is Ok.
+    public string Error { get { return this._error ?? ""; } }
+
+    /// The value. Throws when the result is an error — call only after `IsOk`.
+    public T Unwrap() {
+        if (this._error != null) throw new InvalidOperationException("Result is Err: " + this._error);
+        return this._value;
+    }
+
+    /// The value, or `fallback` when the result is an error.
+    public T UnwrapOr(T fallback) => this._error == null ? this._value : fallback;
+}

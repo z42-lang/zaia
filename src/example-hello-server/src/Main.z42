@@ -1,0 +1,61 @@
+// The server half of the framework, and its join with the render half: the
+// last route renders a `Component` to HTML through the same seam the browser
+// will use, and serves it.
+namespace Example.HelloServer;
+
+using Std;
+using Std.IO;
+using Zaia.Core;
+using Zaia.Ui;
+using Zaia.Renderer;
+using Zaia.Server;
+
+/// A service, registered once at startup and resolved per request.
+public class Greeter {
+    private string _prefix;
+    public Greeter(string prefix) { this._prefix = prefix; }
+    public string Greet(string who) { return this._prefix + ", " + who + "!"; }
+}
+
+/// A component rendered on the server — the same class a browser would mount.
+public class HomePage : Component {
+    private string _who;
+    public HomePage(string who) { this._who = who; }
+
+    public override VNode Render() {
+        return H.Div(
+            H.H1(H.Text("zaia")),
+            H.P(H.Text("Server-rendered for " + this._who)),
+            H.Ul(
+                H.Li(H.A("/hello/world", H.Text("/hello/{name}"))),
+                H.Li(H.A("/health", H.Text("/health")))
+            )
+        ).Class("page");
+    }
+}
+
+string RenderPage(Component c) {
+    HtmlBackend b = new HtmlBackend();
+    Renderer r = new Renderer(b);
+    r.Mount("#app", c.Render());
+    return "<!doctype html><html><body><div id=\"app\">" + b.ToHtml() + "</div></body></html>";
+}
+
+void Main() {
+    WebApp app = WebApp.Create();
+    app.Services.Register<Greeter>(new Greeter("Hello"));
+    app.Use(new LoggerMiddleware());
+
+    app.MapGet("/health", (RequestContext c) => { c.Text(200, "ok"); });
+
+    app.MapGet("/hello/{name}", (RequestContext c) => {
+        Greeter g = (Greeter)c.Services.Resolve<Greeter>();
+        c.Text(200, g.Greet(c.Route("name")));
+    });
+
+    app.MapGet("/", (RequestContext c) => {
+        c.Html(200, RenderPage(new HomePage(c.Query("who").Length > 0 ? c.Query("who") : "everyone")));
+    });
+
+    app.Run("127.0.0.1", 8231);
+}

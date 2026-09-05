@@ -1,0 +1,48 @@
+// The render seam, end to end, with no host: a component describes itself,
+// the reconciler materializes it through a backend, and the backend happens
+// to be one that produces HTML. Swap `HtmlBackend` for `DomBackend` and the
+// same three lines run in a browser.
+namespace Example.CounterSsr;
+
+using Std;
+using Std.IO;
+using Zaia.Ui;
+using Zaia.Renderer;
+
+public class Counter : Component {
+    private State<int> _count;
+
+    public Counter(int initial) {
+        this._count = new State<int>(initial);
+    }
+
+    public void Increment() {
+        this._count.Set(this._count.Get() + 1);
+    }
+
+    public override VNode Render() {
+        return H.Div(
+            H.H1(H.Text("Count: " + this._count.Get().ToString())),
+            H.Button(H.Text("Increment")).Class("primary").OnClick(() => this.Increment()),
+            H.P(H.Text("rendered by zaia <server-side>"))
+        ).Class("counter");
+    }
+}
+
+void Main() {
+    Counter c = new Counter(0);
+
+    HtmlBackend backend = new HtmlBackend();
+    Renderer r = new Renderer(backend);
+    r.Mount("#app", c.Render());
+    Console.WriteLine(backend.ToHtml());
+
+    // State drives the description; re-rendering is the composition root's job,
+    // which on the server means "call Render again for the next response".
+    c.Increment();
+    c.Increment();
+    HtmlBackend b2 = new HtmlBackend();
+    Renderer r2 = new Renderer(b2);
+    r2.Mount("#app", c.Render());
+    Console.WriteLine(b2.ToHtml());
+}

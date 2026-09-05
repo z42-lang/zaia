@@ -1,0 +1,25 @@
+# zaia — the framework workspace.
+#
+# Every package is a direct child of this directory, and that is a toolchain
+# constraint, not a preference: z42c's workspace discovery only globs direct
+# children (`members = ["*"]`), so a nested `framework/` + `apps/` split finds
+# zero members. Naming carries the grouping instead —
+#
+#   zaia.*        framework libraries   (zaia.core → … → zaia.app)
+#   app-*         the products          (the z42 site, the playground)
+#   example-*     runnable specimens, one per seam
+#
+# Cross-package types resolve through *workspace discovery*. A flat Z42_LIBS
+# does not resolve custom-package types, so building the whole workspace in one
+# go is the mechanism that lets `zaia.web` see `zaia.renderer`:
+#
+#   cd src && z42c build --workspace
+#
+# Member manifests spell `version` / `license` out literally — z42c does not
+# implement `version.workspace = true` inheritance yet (it reads the inline
+# table where a string is expected and throws). See docs/workflow/build.md.
+[workspace]
+members = ["*"]
+
+[workspace.build]
+output_dir = "../artifacts"

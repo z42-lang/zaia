@@ -1,0 +1,192 @@
+namespace Zaia.Renderer;
+
+using Std;
+using Std.Text;
+using Std.Collections;
+
+/// One node in the HTML backend's node table. Internal to the backend —
+/// nothing outside sees it, because handles are the public currency.
+public class HtmlNode {
+    public bool IsText;
+    public string Tag;
+    public string Text;
+    public Dictionary<string, string> Attrs;
+    public List<int> Children;
+
+    public HtmlNode(bool isText, string tag, string text) {
+        this.IsText   = isText;
+        this.Tag      = tag;
+        this.Text     = text;
+        this.Attrs    = new Dictionary<string, string>();
+        this.Children = new List<int>();
+    }
+}
+
+/// `IRenderBackend` over an in-memory tree, serialized to an HTML string.
+///
+/// This is server-side rendering, and it is also the seam's proof: it is a
+/// complete backend with no browser, no DOM, and no event loop, written
+/// against the same eleven operations the browser backend implements. If a
+/// component renders correctly here, the description layer is host-free.
+///
+/// Events are accepted and discarded. A server-rendered page has no event
+/// loop to bind them to; the client picks the handlers up when it hydrates the
+/// same tree. That is a deliberate no-op, not a gap.
+///
+///     HtmlBackend b = new HtmlBackend();
+///     new Renderer(b).Mount("#app", new Counter().Render());
+///     Console.WriteLine(b.ToHtml());
+public class HtmlBackend : IRenderBackend {
+    private readonly List<HtmlNode> _nodes;   // handle - 1 indexes this list
+    private int _root;
+
+    /// Void elements: serialized as `<br>` with no closing tag. Anything not
+    /// listed gets an explicit close, including when empty (`<div></div>`),
+    /// which is what HTML requires.
+    private static string VoidTags = ",area,base,br,col,embed,hr,img,input,link,meta,source,track,wbr,";
+
+    public HtmlBackend() {
+        this._nodes = new List<HtmlNode>();
+        this._root  = 0;
+    }
+
+    private int Alloc(HtmlNode n) {
+        this._nodes.Add(n);
+        return this._nodes.Count;          // handles are 1-based; 0 means "no node"
+    }
+
+    private HtmlNode At(int handle) {
+        return this._nodes[handle - 1];
+    }
+
+    // ── IRenderBackend ────────────────────────────────────────────────────
+
+    /// There is no document to query, so the mount point is synthesized: the
+    /// selector is remembered as the root element's id and the root is a
+    /// container that `ToHtml` does not itself emit.
+    public int Root(string selector) {
+        if (this._root == 0) {
+            this._root = this.Alloc(new HtmlNode(false, "#root", ""));
+            this.At(this._root).Attrs.Set("data-mount", selector);
+        }
+        return this._root;
+    }
+
+    public int CreateElement(string tag) {
+        return this.Alloc(new HtmlNode(false, tag, ""));
+    }
+
+    public int CreateText(string text) {
+        return this.Alloc(new HtmlNode(true, "", text));
+    }
+
+    public void SetText(int node, string text) {
+        this.At(node).Text = text;
+    }
+
+    public void SetAttribute(int node, string name, string value) {
+        this.At(node).Attrs.Set(name, value);
+    }
+
+    public void RemoveAttribute(int node, string name) {
+        this.At(node).Attrs.Remove(name);
+    }
+
+    public void AppendChild(int parent, int child) {
+        this.At(parent).Children.Add(child);
+    }
+
+    public void InsertBefore(int parent, int child, int before) {
+        if (before == 0) { this.AppendChild(parent, child); return; }
+        List<int> kids = this.At(parent).Children;
+        int i = kids.IndexOf(before);
+        if (i < 0) { kids.Add(child); return; }
+        kids.Insert(i, child);
+    }
+
+    public void RemoveChild(int parent, int child) {
+        this.At(parent).Children.Remove(child);
+    }
+
+    public void Clear(int node) {
+        this.At(node).Children.Clear();
+    }
+
+    /// No event loop here — see the class doc. Recorded nowhere on purpose:
+    /// keeping a handler alive past the request would outlive the tree.
+    public void On(int node, string eventName, Action handler) { }
+
+    // ── Output ────────────────────────────────────────────────────────────
+
+    /// Serialize the mounted tree — the root container's children, without the
+    /// container itself, so the output drops straight into a page body.
+    public string ToHtml() {
+        if (this._root == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        List<int> kids = this.At(this._root).Children;
+        int i = 0;
+        while (i < kids.Count) { this.Write(sb, kids[i]); i = i + 1; }
+        return sb.ToString();
+    }
+
+    /// Serialize one subtree, including its own element.
+    public string ToHtml(int node) {
+        StringBuilder sb = new StringBuilder();
+        this.Write(sb, node);
+        return sb.ToString();
+    }
+
+    private void Write(StringBuilder sb, int handle) {
+        HtmlNode n = this.At(handle);
+
+        if (n.IsText) {
+            sb.Append(HtmlBackend.EscapeText(n.Text));
+            return;
+        }
+
+        sb.Append("<");
+        sb.Append(n.Tag);
+
+        string[] names = n.Attrs.Keys();
+        int a = 0;
+        while (a < names.Length) {
+            sb.Append(" ");
+            sb.Append(names[a]);
+            sb.Append("=\"");
+            sb.Append(HtmlBackend.EscapeAttr(n.Attrs.Get(names[a])));
+            sb.Append("\"");
+            a = a + 1;
+        }
+        sb.Append(">");
+
+        if (HtmlBackend.IsVoid(n.Tag)) return;
+
+        int c = 0;
+        while (c < n.Children.Count) { this.Write(sb, n.Children[c]); c = c + 1; }
+
+        sb.Append("</");
+        sb.Append(n.Tag);
+        sb.Append(">");
+    }
+
+    private static bool IsVoid(string tag) {
+        return HtmlBackend.VoidTags.Contains("," + tag + ",");
+    }
+
+    /// Escape text content. `&` first — otherwise it double-escapes the
+    /// entities the later replacements introduce.
+    public static string EscapeText(string s) {
+        string r = s.Replace("&", "&amp;");
+        r = r.Replace("<", "&lt;");
+        r = r.Replace(">", "&gt;");
+        return r;
+    }
+
+    /// Escape an attribute value. Attributes are always emitted in double
+    /// quotes, so the double quote is the one that must go.
+    public static string EscapeAttr(string s) {
+        string r = HtmlBackend.EscapeText(s);
+        r = r.Replace("\"", "&quot;");
+        return r;
+    }
+}

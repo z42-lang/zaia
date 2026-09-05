@@ -1,0 +1,73 @@
+namespace Zaia.Web;
+
+using Std;
+
+/// The VM contract `zaia.web` is written against. **Frozen — see
+/// docs/design/dom-interop.md.**
+///
+/// These eight builtins are the entire surface z42 needs to drive a browser,
+/// and they are a **z42 VM change, not framework code**: they live in the
+/// language repo behind `add-wasm-dom-poc`, implemented for `wasm32` and
+/// stubbed elsewhere. Declaring them here rather than describing them in prose
+/// is deliberate — the contract compiles, so it cannot drift from the code
+/// that consumes it.
+///
+/// **Node handles are `int`s** indexing a wasm-side node table. `web_sys`
+/// objects never become z42 values, which is what keeps this an eight-function
+/// contract instead of a DOM binding.
+///
+/// **Strings cross freely here** and this is the whole reason the design works.
+/// The wasm *facade* (`@z42/wasm`, JS ↔ VM) marshals only null/bool/number/
+/// bigint, so nothing string-shaped can enter or leave through it. A builtin is
+/// on the other side of that boundary: it receives a z42 `Value::Str` directly,
+/// inside the VM. Going through builtins rather than the facade is what lets
+/// z42 touch the DOM without waiting on facade string marshalling.
+///
+/// Until the builtins ship in a nightly SDK, every call here throws at runtime.
+/// The package still compiles — an extern to an absent builtin is a link-time
+/// concern, not a compile-time one — so everything above this file can be
+/// built and tested today.
+public static class DomNative {
+    /// `document.querySelector(selector)` → handle, or 0 when not found.
+    [Native("__dom_get_element_by_id")]  public static extern int Root(string selector);
+
+    /// `document.createElement(tag)` → handle.
+    [Native("__dom_create_element")]     public static extern int CreateElement(string tag);
+
+    /// `document.createTextNode(text)` → handle.
+    [Native("__dom_create_text")]        public static extern int CreateText(string text);
+
+    /// `node.textContent = text`.
+    [Native("__dom_set_text")]           public static extern void SetText(int node, string text);
+
+    /// `node.setAttribute(name, value)`.
+    [Native("__dom_set_attribute")]      public static extern void SetAttribute(int node, string name, string value);
+
+    /// `node.removeAttribute(name)`.
+    [Native("__dom_remove_attribute")]   public static extern void RemoveAttribute(int node, string name);
+
+    /// `parent.appendChild(child)`.
+    [Native("__dom_append_child")]       public static extern void AppendChild(int parent, int child);
+
+    /// `parent.insertBefore(child, before)`; `before == 0` means append.
+    [Native("__dom_insert_before")]      public static extern void InsertBefore(int parent, int child, int before);
+
+    /// `parent.removeChild(child)`.
+    [Native("__dom_remove_child")]       public static extern void RemoveChild(int parent, int child);
+
+    /// Remove every child of `node`.
+    [Native("__dom_clear")]              public static extern void Clear(int node);
+
+    /// `node.addEventListener(eventName, handler)`.
+    ///
+    /// The one hard operation in the contract. A click fires *outside* any
+    /// `invoke`, so the VM must re-enter itself: re-acquire the resident host,
+    /// re-establish the ambient GC heap, and run the handler. The PoC accepts
+    /// **non-capturing handlers only** — a plain method group or a lambda that
+    /// closes over nothing — because a capturing closure needs its environment
+    /// GC-rooted across event turns, which is a separate piece of work.
+    ///
+    /// That restriction is invisible in this signature and very visible at a
+    /// call site, so it is stated in `IRenderBackend.On` and again here.
+    [Native("__dom_add_event_listener")] public static extern void AddEventListener(int node, string eventName, Action handler);
+}

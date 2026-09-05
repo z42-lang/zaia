@@ -1,0 +1,21 @@
+namespace Zaia.Server;
+
+using Std;
+using Zaia.Core;
+
+/// A handler: everything it needs is in the context, and it answers by sending.
+///
+/// `Action<RequestContext>` rather than a `Func<RequestContext, Response>` —
+/// see the note on `RequestContext` for why the return-a-response shape does
+/// not type-check in z42 today.
+public class Endpoint {
+    public string Verb;
+    public RoutePattern Pattern;
+    public Action<RequestContext> Handler;
+
+    public Endpoint(string verb, RoutePattern pattern, Action<RequestContext> handler) {
+        this.Verb    = verb;
+        this.Pattern = pattern;
+        this.Handler = handler;
+    }
+}

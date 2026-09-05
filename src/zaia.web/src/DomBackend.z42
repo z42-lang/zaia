@@ -1,0 +1,49 @@
+namespace Zaia.Web;
+
+using Std;
+using Zaia.Renderer;
+
+/// `IRenderBackend` over the real browser DOM.
+///
+/// The entire package is this adapter: each seam operation forwards to one
+/// builtin. There is no logic here, and that is the point — the reconciler,
+/// the description layer and every component were written against
+/// `IRenderBackend`, so the browser "just turns on" when the builtins land.
+/// Compare `HtmlBackend`, which is the same eleven operations against an
+/// in-memory tree.
+///
+/// **Runs under wasm32 only.** Every method throws on a native VM, where the
+/// builtins are stubs.
+public class DomBackend : IRenderBackend {
+    public int Root(string selector)            { return DomNative.Root(selector); }
+    public int CreateElement(string tag)        { return DomNative.CreateElement(tag); }
+    public int CreateText(string text)          { return DomNative.CreateText(text); }
+
+    public void SetText(int node, string text)  { DomNative.SetText(node, text); }
+
+    public void SetAttribute(int node, string name, string value) {
+        DomNative.SetAttribute(node, name, value);
+    }
+
+    public void RemoveAttribute(int node, string name) {
+        DomNative.RemoveAttribute(node, name);
+    }
+
+    public void AppendChild(int parent, int child) {
+        DomNative.AppendChild(parent, child);
+    }
+
+    public void InsertBefore(int parent, int child, int before) {
+        DomNative.InsertBefore(parent, child, before);
+    }
+
+    public void RemoveChild(int parent, int child) {
+        DomNative.RemoveChild(parent, child);
+    }
+
+    public void Clear(int node) { DomNative.Clear(node); }
+
+    public void On(int node, string eventName, Action handler) {
+        DomNative.AddEventListener(node, eventName, handler);
+    }
+}

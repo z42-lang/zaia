@@ -1,0 +1,16 @@
+[project]
+name        = "example-hello-server"
+kind        = "exe"
+entry       = "Example.HelloServer.Main"
+version     = "0.1.0"
+license     = "MIT"
+description = "A WebApp over Std.Net.Http: routing, route captures, middleware, DI, and server-rendered HTML."
+
+[dependencies]
+"zaia.core"     = "0.1.0"
+"zaia.ui"       = "0.1.0"
+"zaia.renderer" = "0.1.0"
+"zaia.server"   = "0.1.0"
+
+[sources]
+include = ["src/**/*.z42"]

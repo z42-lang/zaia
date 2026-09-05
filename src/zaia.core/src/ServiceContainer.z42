@@ -1,0 +1,54 @@
+namespace Zaia.Core;
+
+using Std;
+using Std.Collections;
+
+/// A minimal service locator — the composition root's registry.
+///
+/// Deliberately *not* an injection container: no constructor injection, no
+/// lifetime graph, no auto-wiring. z42 has no attribute-driven activation
+/// story yet, and a request handler is a lambda rather than a class with
+/// constructor parameters, so there is nothing for auto-wiring to bind. The
+/// framework needs exactly one capability — "hand me the store I registered
+/// at startup" — and this provides it in a form that stays honest if a real
+/// container later grows behind the same two methods.
+///
+/// Registrations are singletons, keyed by the *static* type argument, so
+/// registering a `UserStore` under an `IUserStore` handle is explicit:
+///
+///     services.Register<IUserStore>(new SqlUserStore());
+///
+/// Not thread-safe for writes: register everything during startup, before
+/// the server accepts its first connection, then treat it as read-only.
+public class ServiceContainer {
+    private readonly Dictionary<string, object> _instances;
+
+    public ServiceContainer() {
+        this._instances = new Dictionary<string, object>();
+    }
+
+    /// Register `instance` under the key `T`. A second registration for the
+    /// same `T` replaces the first.
+    public void Register<T>(T instance) {
+        this._instances.Set(typeof(T).FullName, (object)instance);
+    }
+
+    /// Resolve the instance registered under `T`.
+    /// Throws when nothing is registered — a startup wiring bug, not a
+    /// runtime condition worth branching on.
+    public T Resolve<T>() {
+        string key = typeof(T).FullName;
+        if (!this._instances.ContainsKey(key))
+            throw new InvalidOperationException("no service registered for " + key);
+        return (T)this._instances.Get(key);
+    }
+
+    /// Resolve, or null when `T` was never registered.
+    public T? TryResolve<T>() {
+        string key = typeof(T).FullName;
+        if (!this._instances.ContainsKey(key)) return default(T);
+        return (T)this._instances.Get(key);
+    }
+
+    public bool Has<T>() { return this._instances.ContainsKey(typeof(T).FullName); }
+}

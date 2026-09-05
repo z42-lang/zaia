@@ -1,0 +1,90 @@
+// The claim the framework rests on: a URL means the same thing on both ends
+// because both ends read the same table.
+//
+// This runs natively — the client path is driven through `MemoryLocation` and
+// `HtmlBackend` instead of the browser's `BrowserLocation` and `DomBackend`,
+// which is exactly what the backend seam is for. Swapping those two types is
+// the entire difference between this program and the browser.
+namespace Example.Isomorphic;
+
+using Std;
+using Std.IO;
+using Zaia.Core;
+using Zaia.Ui;
+using Zaia.Renderer;
+using Zaia.Shared;
+using Zaia.App;
+
+public class HomePage : Component {
+    public override VNode Render() {
+        return H.Div(
+            H.H1(H.Text("zaia")),
+            H.P(H.Text("A full-stack framework for z42."))
+        ).Class("home");
+    }
+}
+
+public class DocPage : Component {
+    private string _slug;
+    public DocPage(string slug) { this._slug = slug; }
+
+    public override VNode Render() {
+        return H.Div(
+            H.H1(H.Text("doc: " + this._slug)),
+            H.A("/", H.Text("home"))
+        ).Class("doc");
+    }
+}
+
+public class HomeFactory : IPageFactory {
+    public Component Create(RouteMatch match) { return new HomePage(); }
+}
+
+public class DocFactory : IPageFactory {
+    public Component Create(RouteMatch match) { return new DocPage(match.Get("slug")); }
+}
+
+/// The shared declaration. In a real app this lives in a package both the
+/// server executable and the wasm client executable depend on.
+PageTable BuildPages() {
+    return new PageTable()
+        .Add("/", new HomeFactory())
+        .Add("/docs/{slug}", new DocFactory());
+}
+
+/// What the server does: resolve, render, serialize.
+string ServerRender(PageTable pages, string path) {
+    PageMatch m = pages.Resolve(path);
+    if (!m.Found) return "<h1>404</h1>";
+    HtmlBackend b = new HtmlBackend();
+    Renderer r = new Renderer(b);
+    r.Mount("#app", m.Page.Render());
+    return b.ToHtml();
+}
+
+/// What the client does: resolve through the Router, mount through App.
+string ClientRender(PageTable pages, string path) {
+    HtmlBackend b = new HtmlBackend();
+    MemoryLocation loc = new MemoryLocation(path);
+    Router.StartWith(pages, "#app", loc, b);
+    return b.ToHtml();
+}
+
+void Check(string label, string server, string client) {
+    Console.WriteLine(label);
+    Console.WriteLine("  server: " + server);
+    Console.WriteLine("  client: " + client);
+    Console.WriteLine(server == client ? "  MATCH" : "  *** MISMATCH ***");
+}
+
+void Main() {
+    PageTable pages = BuildPages();
+    UiDispatch.Reset();
+
+    Check("/",              ServerRender(pages, "/"),              ClientRender(pages, "/"));
+    Check("/docs/getting-started",
+          ServerRender(pages, "/docs/getting-started"),
+          ClientRender(pages, "/docs/getting-started"));
+
+    Console.WriteLine("no such route -> " + ServerRender(pages, "/missing"));
+}

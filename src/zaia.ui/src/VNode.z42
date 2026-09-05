@@ -1,0 +1,114 @@
+namespace Zaia.Ui;
+
+using Std;
+using Std.Collections;
+
+/// One handler bound to one DOM event name on one node.
+///
+/// A pair rather than a `Dictionary<string, Action>` because ordering is
+/// observable: the reconciler diffs handler lists positionally, and a
+/// dictionary's iteration order is not part of its contract.
+public class VEvent {
+    /// DOM event name without the "on" prefix — "click", "input", "submit".
+    public string Name;
+    public Action Handler;
+
+    public VEvent(string name, Action handler) {
+        this.Name    = name;
+        this.Handler = handler;
+    }
+}
+
+/// A node in a described UI tree.
+///
+/// `VNode` is a **description**, not a thing on screen. It carries no node
+/// handle, no backend reference, and no identity beyond `Key`. Building one is
+/// free of side effects, which is what lets the same tree be rendered to HTML
+/// on the server and to the DOM in the browser, and be asserted against in a
+/// test with no host at all.
+///
+/// Two shapes, distinguished by `IsText`:
+///   - **text**  — `Text` is the content; `Tag`/`Attrs`/`Events`/`Children` are unused
+///   - **element** — `Tag` is the element name; the rest describe it
+public class VNode {
+    public bool IsText;
+
+    /// Element name ("div", "button"). Empty for a text node.
+    public string Tag;
+
+    /// Text content. Empty for an element node.
+    public string Text;
+
+    /// Attribute name → value. `class`, `id`, `href`, `value`, `disabled`…
+    /// Attributes are *attributes*, not properties: the backend decides how a
+    /// given name reaches the host.
+    public Dictionary<string, string> Attrs;
+
+    public List<VEvent> Events;
+    public List<VNode> Children;
+
+    /// Reconciliation identity within a sibling list. Empty means "match by
+    /// position". Set it whenever a list can reorder, or the reconciler will
+    /// patch the wrong node's state.
+    public string Key;
+
+    private VNode(bool isText) {
+        this.IsText   = isText;
+        this.Tag      = "";
+        this.Text     = "";
+        this.Key      = "";
+        this.Attrs    = new Dictionary<string, string>();
+        this.Events   = new List<VEvent>();
+        this.Children = new List<VNode>();
+    }
+
+    public static VNode Element(string tag) {
+        VNode n = new VNode(false);
+        n.Tag = tag;
+        return n;
+    }
+
+    public static VNode TextNode(string text) {
+        VNode n = new VNode(true);
+        n.Text = text;
+        return n;
+    }
+
+    // ── Fluent builders ───────────────────────────────────────────────────
+    //
+    // These return `this` so a node reads as one expression. They are methods
+    // rather than public settable fields on purpose: z42 does not yet flow a
+    // target type through *field assignment*, so `node.OnClick = () => {...}`
+    // fails to infer where `node.OnClick(() => {...})` succeeds. Keeping the
+    // whole builder surface on methods keeps that gap invisible to callers.
+    // See docs/design/language-surface.md.
+
+    public VNode Attr(string name, string value) {
+        this.Attrs.Set(name, value);
+        return this;
+    }
+
+    public VNode Class(string value)  { return this.Attr("class", value); }
+    public VNode Id(string value)     { return this.Attr("id", value); }
+    public VNode WithKey(string key)  { this.Key = key; return this; }
+
+    /// Bind `handler` to DOM event `name`.
+    public VNode On(string name, Action handler) {
+        this.Events.Add(new VEvent(name, handler));
+        return this;
+    }
+
+    public VNode OnClick(Action handler) { return this.On("click", handler); }
+    public VNode OnInput(Action handler) { return this.On("input", handler); }
+
+    public VNode Add(VNode child) {
+        this.Children.Add(child);
+        return this;
+    }
+
+    public VNode AddAll(VNode[] children) {
+        int i = 0;
+        while (i < children.Length) { this.Children.Add(children[i]); i = i + 1; }
+        return this;
+    }
+}

@@ -1,0 +1,29 @@
+namespace Zaia.Server;
+
+using Std;
+using Std.IO;
+
+/// A step that runs before routing, and may answer instead of it.
+///
+/// A **nominal interface**, not a `Func<RequestContext, bool>`, for the same
+/// reason `IChangeListener` is one: a named type crosses a package boundary
+/// cleanly, and middleware is usually stateful enough to want a class anyway.
+///
+/// Return `true` to continue the pipeline, `false` to stop. A middleware that
+/// answers the request must return `false`; `WebApp` also treats an already-
+/// sent response as a stop, so forgetting is not fatal.
+public interface IMiddleware {
+    bool Invoke(RequestContext ctx);
+}
+
+/// Writes one line per request to stdout.
+///
+/// Deliberately the only built-in: it is the one every application wants on
+/// day one, and it is small enough to read as a worked example of the
+/// interface. Anything richer belongs in an application, not the framework.
+public class LoggerMiddleware : IMiddleware {
+    public bool Invoke(RequestContext ctx) {
+        Console.WriteLine(ctx.Method + " " + ctx.Path);
+        return true;
+    }
+}
