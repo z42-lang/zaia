@@ -1,0 +1,59 @@
+namespace Zaia.Renderer;
+
+using Std;
+
+/// The seam every host implements. **This interface is frozen.**
+///
+/// It is an imperative mutation API that a diff can target — not the DOM API,
+/// and not a rendering API. It says nothing about HTML, nothing about
+/// WebAssembly, and nothing about how a node is stored. That is the whole
+/// point: `Component`, `H`, `VNode` and `Renderer` are written against these
+/// eleven operations, so a new host is a new implementation of this file and
+/// nothing above it moves.
+///
+/// Three hosts are planned, and the design is only justified if all three fit:
+///   - `HtmlBackend`  (this package) — server-side rendering to an HTML string
+///   - `DomBackend`   (`zaia.web`)   — the real browser DOM, via VM builtins
+///   - a test backend                — records the op stream for assertions
+///
+/// **Node handles are opaque `int`s.** Never a host object. The browser backend
+/// indexes a wasm-side node table with them; the HTML backend indexes an array.
+/// Handle 0 is reserved for "no node" — a real node is always positive.
+///
+/// Operations are *not* required to be idempotent, and the renderer never
+/// issues one against a handle it has not been given.
+public interface IRenderBackend {
+    /// Resolve the mount point named by `selector` (e.g. "#app") to a handle.
+    /// Returns 0 when the host has no such node — the caller decides whether
+    /// that is fatal.
+    int Root(string selector);
+
+    int CreateElement(string tag);
+    int CreateText(string text);
+
+    /// Replace a text node's content.
+    void SetText(int node, string text);
+
+    void SetAttribute(int node, string name, string value);
+    void RemoveAttribute(int node, string name);
+
+    void AppendChild(int parent, int child);
+
+    /// Insert `child` into `parent` immediately before `before`. When `before`
+    /// is 0 this is `AppendChild`.
+    void InsertBefore(int parent, int child, int before);
+
+    void RemoveChild(int parent, int child);
+
+    /// Remove every child of `node`.
+    void Clear(int node);
+
+    /// Bind `handler` to `eventName` on `node`.
+    ///
+    /// A backend with no event loop (the HTML one) records the binding and
+    /// drops it — server-side rendering has no events, and that is not an
+    /// error. See docs/design/dom-interop.md for the browser's re-entry rules,
+    /// which are the reason this takes an `Action` and not a closure-carrying
+    /// object.
+    void On(int node, string eventName, Action handler);
+}

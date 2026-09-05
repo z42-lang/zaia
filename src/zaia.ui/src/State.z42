@@ -1,0 +1,45 @@
+namespace Zaia.Ui;
+
+using Std;
+
+/// A mutable value that announces its own changes.
+///
+/// The whole reactivity model, and deliberately the whole of it: read with
+/// `Get`, write with `Set`, and a write signals `UiDispatch`. There is no
+/// dependency tracking, no computed values, no batching — the composition root
+/// decides what a signal costs, and today it costs one re-render.
+///
+///     class Counter : Component {
+///         private State<int> _n = new State<int>(0);
+///         public override VNode Render() {
+///             return H.Button(H.Text("" + this._n.Get()))
+///                     .OnClick(() => this._n.Set(this._n.Get() + 1));
+///         }
+///     }
+///
+/// A `State<T>` belongs to one component instance. Sharing one across requests
+/// on the server would share it across threads; don't — hold request state in
+/// the request, not in a component field.
+public class State<T> {
+    private T _value;
+
+    public State(T initial) {
+        this._value = initial;
+    }
+
+    public T Get() { return this._value; }
+
+    /// Write and signal. Signals unconditionally — `T` has no equality
+    /// constraint here, so this layer cannot know whether the value really
+    /// changed, and a spurious re-render is cheaper than a missed one.
+    public void Set(T value) {
+        this._value = value;
+        UiDispatch.Signal();
+    }
+
+    /// Write without signalling — for initialisation paths that will be
+    /// followed by a render anyway.
+    public void SetQuiet(T value) {
+        this._value = value;
+    }
+}

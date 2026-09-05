@@ -1,0 +1,88 @@
+namespace Zaia.Renderer;
+
+using Std;
+using Std.Collections;
+using Zaia.Ui;
+
+/// Turns a described tree into host nodes through an `IRenderBackend`.
+///
+/// It renders. It does not assemble (that is `zaia.app`) and it does not
+/// describe (that is `zaia.ui`). It holds exactly two things: the backend it
+/// writes to, and the handle of the mount point.
+///
+/// **Reconciliation is currently a rebuild.** `Update` clears the mount point
+/// and materialises the tree again. This is correct, and it is honestly
+/// insufficient: a rebuild drops focus, scroll position, and any host state
+/// living on a node, so it is fine for the content pages the framework serves
+/// today and wrong for a form. Keyed diffing replaces the body of `Update`
+/// alone — `VNode.Key` already exists to carry the identity a diff needs, and
+/// no other file changes when it lands. See docs/design/rendering.md.
+public class Renderer {
+    private readonly IRenderBackend _backend;
+    private int _root;
+
+    public Renderer(IRenderBackend backend) {
+        this._backend = backend;
+        this._root    = 0;
+    }
+
+    /// The backend this renderer writes to — the composition root needs it to
+    /// read back a result (`HtmlBackend.ToHtml`) or to mount a second tree.
+    public IRenderBackend Backend { get { return this._backend; } }
+
+    /// The mount point's handle. 0 before `Mount`.
+    public int RootHandle { get { return this._root; } }
+
+    /// Resolve `selector`, render `tree` into it, and remember the mount point
+    /// so `Update` can re-render there.
+    public void Mount(string selector, VNode tree) {
+        this._root = this._backend.Root(selector);
+        if (this._root == 0)
+            throw new InvalidOperationException("mount point not found: " + selector);
+        this._backend.Clear(this._root);
+        this.Materialize(this._root, tree);
+    }
+
+    /// Re-render `tree` at the mount point established by `Mount`.
+    public void Update(VNode tree) {
+        if (this._root == 0)
+            throw new InvalidOperationException("Update before Mount");
+        this._backend.Clear(this._root);
+        this.Materialize(this._root, tree);
+    }
+
+    /// Create the nodes `node` describes and append them under `parent`.
+    /// Returns the handle of the created node.
+    private int Materialize(int parent, VNode node) {
+        if (node.IsText) {
+            int t = this._backend.CreateText(node.Text);
+            this._backend.AppendChild(parent, t);
+            return t;
+        }
+
+        int h = this._backend.CreateElement(node.Tag);
+
+        string[] names = node.Attrs.Keys();
+        int i = 0;
+        while (i < names.Length) {
+            this._backend.SetAttribute(h, names[i], node.Attrs.Get(names[i]));
+            i = i + 1;
+        }
+
+        int e = 0;
+        while (e < node.Events.Count) {
+            VEvent ev = node.Events[e];
+            this._backend.On(h, ev.Name, ev.Handler);
+            e = e + 1;
+        }
+
+        int c = 0;
+        while (c < node.Children.Count) {
+            this.Materialize(h, node.Children[c]);
+            c = c + 1;
+        }
+
+        this._backend.AppendChild(parent, h);
+        return h;
+    }
+}

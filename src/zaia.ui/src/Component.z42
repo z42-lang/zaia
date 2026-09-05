@@ -1,0 +1,27 @@
+namespace Zaia.Ui;
+
+using Std;
+
+/// A unit of UI: state plus a rule for describing it.
+///
+/// Subclasses override `Render()` and return a fresh `VNode` tree each call.
+/// `Render()` must be **pure with respect to the host** — no DOM, no I/O, no
+/// assumption about being called once. The renderer calls it whenever it
+/// needs the current description, and the server calls it exactly once per
+/// request.
+///
+/// Lifecycle is two hooks, both no-ops by default, both **client-only**: the
+/// server never mounts, so it never calls them.
+public abstract class Component {
+    /// Describe the current state. Called by the renderer; never call it
+    /// yourself to "refresh" — mutate a `State<T>` instead.
+    public abstract VNode Render();
+
+    /// Called once after the component's nodes first exist in the host.
+    /// The place to start a timer or kick off a fetch.
+    public virtual void OnMount() { }
+
+    /// Called once before the component's nodes are removed. Must release
+    /// anything `OnMount` acquired.
+    public virtual void OnUnmount() { }
+}

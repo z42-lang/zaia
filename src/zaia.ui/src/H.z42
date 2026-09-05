@@ -1,0 +1,57 @@
+namespace Zaia.Ui;
+
+using Std;
+
+/// Element factory — hyperscript, as a static class.
+///
+/// `H.Div(H.H1(H.Text("hi")))` reads as the markup it describes. Every helper
+/// is `params VNode[]` so children are positional, and the fluent setters on
+/// `VNode` carry everything else:
+///
+///     H.Button(H.Text("Save")).Class("primary").OnClick(save)
+///
+/// Only elements that earn a named helper get one; anything else goes through
+/// `H.El("section", ...)`. A complete HTML vocabulary here would be a
+/// maintenance surface with no design content.
+public static class H {
+    /// Any element by name.
+    public static VNode El(string tag, params VNode[] children) {
+        return VNode.Element(tag).AddAll(children);
+    }
+
+    /// A text node. Text is escaped by the backend, not here — escaping is a
+    /// property of the output format, and this layer does not know the format.
+    public static VNode Text(string text) {
+        return VNode.TextNode(text);
+    }
+
+    public static VNode Div(params VNode[] children)     { return H.El("div", children); }
+    public static VNode Span(params VNode[] children)    { return H.El("span", children); }
+    public static VNode P(params VNode[] children)       { return H.El("p", children); }
+    public static VNode H1(params VNode[] children)      { return H.El("h1", children); }
+    public static VNode H2(params VNode[] children)      { return H.El("h2", children); }
+    public static VNode H3(params VNode[] children)      { return H.El("h3", children); }
+    public static VNode Ul(params VNode[] children)      { return H.El("ul", children); }
+    public static VNode Li(params VNode[] children)      { return H.El("li", children); }
+    public static VNode Nav(params VNode[] children)     { return H.El("nav", children); }
+    public static VNode Header(params VNode[] children)  { return H.El("header", children); }
+    public static VNode Footer(params VNode[] children)  { return H.El("footer", children); }
+    public static VNode Section(params VNode[] children) { return H.El("section", children); }
+    public static VNode Main(params VNode[] children)    { return H.El("main", children); }
+    public static VNode Pre(params VNode[] children)     { return H.El("pre", children); }
+    public static VNode Code(params VNode[] children)    { return H.El("code", children); }
+    public static VNode Button(params VNode[] children)  { return H.El("button", children); }
+    public static VNode Form(params VNode[] children)    { return H.El("form", children); }
+    public static VNode Label(params VNode[] children)   { return H.El("label", children); }
+
+    /// Void elements — no children by construction.
+    public static VNode Input()  { return VNode.Element("input"); }
+    public static VNode Br()     { return VNode.Element("br"); }
+    public static VNode Hr()     { return VNode.Element("hr"); }
+
+    /// `<a href=...>` — the one element whose required attribute is worth a
+    /// dedicated overload, because a link without an href is a bug.
+    public static VNode A(string href, params VNode[] children) {
+        return H.El("a", children).Attr("href", href);
+    }
+}

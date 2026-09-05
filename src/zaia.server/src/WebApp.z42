@@ -1,0 +1,133 @@
+namespace Zaia.Server;
+
+using Std;
+using Std.IO;
+using Std.Collections;
+using Std.Net.Http;
+using Zaia.Core;
+
+/// The server composition root.
+///
+///     void Main() {
+///         WebApp app = WebApp.Create();
+///         app.Services.Register<UserStore>(new UserStore());
+///         app.Use(new LoggerMiddleware());
+///         app.MapGet("/",           (RequestContext c) => { c.Text(200, "hello"); });
+///         app.MapGet("/users/{id}", (RequestContext c) => { c.JsonRaw(200, Find(c.Route("id"))); });
+///         app.Run("0.0.0.0", 8080);
+///     }
+///
+/// A thin layer over `Std.Net.Http.HttpServer`: this class owns the route
+/// table, the middleware list, and the service registry, and delegates every
+/// byte of socket work to the standard library.
+///
+/// **Threading.** `Run` uses `ServeWithPool`, so handlers execute on worker
+/// threads concurrently. Register services before `Run` and treat them as
+/// read-only afterwards, or make them thread-safe themselves. There is no
+/// async story here because z42 has no `async`/`await` yet (0.8.x); a worker
+/// pool over blocking handlers is the honest shape until then.
+public class WebApp {
+    private readonly List<Endpoint> _endpoints;
+    private readonly List<IMiddleware> _middleware;
+
+    /// Services resolvable from any handler through `ctx.Services`.
+    public ServiceContainer Services;
+
+    /// Worker threads used by `Run`. Set before calling it.
+    public int Workers;
+
+    /// Depth of the accept queue feeding the workers.
+    public int QueueSize;
+
+    private WebApp() {
+        this._endpoints  = new List<Endpoint>();
+        this._middleware = new List<IMiddleware>();
+        this.Services    = new ServiceContainer();
+        this.Workers     = 8;
+        this.QueueSize   = 128;
+    }
+
+    public static WebApp Create() { return new WebApp(); }
+
+    // ── Composition ───────────────────────────────────────────────────────
+
+    /// Append a middleware. They run in registration order, before routing.
+    public WebApp Use(IMiddleware m) {
+        this._middleware.Add(m);
+        return this;
+    }
+
+    /// Map `verb` + `path` to `handler`. `path` may contain `{name}` captures,
+    /// which arrive in the handler as `ctx.Route("name")`.
+    public WebApp Map(string verb, string path, Action<RequestContext> handler) {
+        this._endpoints.Add(new Endpoint(verb, new RoutePattern(path), handler));
+        return this;
+    }
+
+    public WebApp MapGet(string path, Action<RequestContext> handler)    { return this.Map(HttpVerb.Get, path, handler); }
+    public WebApp MapPost(string path, Action<RequestContext> handler)   { return this.Map(HttpVerb.Post, path, handler); }
+    public WebApp MapPut(string path, Action<RequestContext> handler)    { return this.Map(HttpVerb.Put, path, handler); }
+    public WebApp MapPatch(string path, Action<RequestContext> handler)  { return this.Map(HttpVerb.Patch, path, handler); }
+    public WebApp MapDelete(string path, Action<RequestContext> handler) { return this.Map(HttpVerb.Delete, path, handler); }
+
+    // ── Dispatch ──────────────────────────────────────────────────────────
+
+    /// Run one request through middleware, then routing. Public because it is
+    /// the whole application as a function — a test can drive it with a
+    /// synthetic context and never open a socket.
+    public void Dispatch(RequestContext ctx) {
+        int i = 0;
+        while (i < this._middleware.Count) {
+            if (!this._middleware[i].Invoke(ctx)) return;
+            if (ctx.Answered) return;
+            i = i + 1;
+        }
+
+        int e = 0;
+        while (e < this._endpoints.Count) {
+            Endpoint ep = this._endpoints[e];
+            if (ep.Verb == ctx.Method) {
+                RouteMatch m = ep.Pattern.Match(ctx.Path);
+                if (m.Matched) {
+                    ctx.Match = m;
+                    Action<RequestContext> h = ep.Handler;
+                    h(ctx);
+                    return;
+                }
+            }
+            e = e + 1;
+        }
+
+        ctx.NotFound();
+    }
+
+    // ── Hosting ───────────────────────────────────────────────────────────
+
+    /// Bind and serve until the process ends. Blocks.
+    public void Run(string host, int port) {
+        HttpServer server = new HttpServer();
+        server.Bind(host, port);
+        Console.WriteLine("zaia listening on http://" + host + ":" + port.ToString());
+
+        ServiceContainer services = this.Services;
+        WebApp self = this;
+        server.ServeWithPool((HttpServerContext raw) => {
+            self.Serve(raw, services);
+        }, this.Workers, this.QueueSize);
+    }
+
+    /// One connection's worth of work, with the handler's exceptions contained.
+    ///
+    /// An uncaught throw in a handler must not take down a worker thread and,
+    /// through it, the pool — so it becomes a 500. The message is deliberately
+    /// not echoed to the client.
+    private void Serve(HttpServerContext raw, ServiceContainer services) {
+        RequestContext ctx = new RequestContext(raw, services);
+        try {
+            this.Dispatch(ctx);
+        } catch (Exception ex) {
+            Console.WriteLine("unhandled: " + ex.Message);
+            if (!ctx.Answered) ctx.Text(500, "Internal Server Error");
+        }
+    }
+}

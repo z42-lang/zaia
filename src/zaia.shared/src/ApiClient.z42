@@ -1,0 +1,66 @@
+namespace Zaia.Shared;
+
+using Std;
+using Std.Json;
+using Std.Net.Http;
+
+/// Calls an `ApiContract` endpoint and deserializes the reply.
+///
+/// The client half of end-to-end typing: the server returns
+/// `GetUser.Response`, the client asks for `GetUser.Response`, and the same
+/// class defines both. Rename a field and neither side compiles.
+///
+/// **Native only, today.** It goes through `Std.Net.Http.HttpClient`, which is
+/// sockets. A browser has no sockets — a wasm build needs the request to go
+/// out through `fetch`, which is another VM builtin contract of the same shape
+/// as `__dom_*` and is not yet specified. Until then this type serves
+/// server-to-server calls and native clients; the browser talks to its server
+/// through the page table, not through this. See docs/design/dom-interop.md.
+public class ApiClient {
+    private readonly HttpClient _http;
+    private readonly string _baseUrl;
+
+    /// `baseUrl` is joined to each path; a trailing slash is trimmed so
+    /// `"http://h:80/"` + `"/a"` does not become `"http://h:80//a"`.
+    public ApiClient(string baseUrl) {
+        this._http    = new HttpClient();
+        this._baseUrl = baseUrl.EndsWith("/") ? baseUrl.Substring(0, baseUrl.Length - 1) : baseUrl;
+    }
+
+    public HttpClient Http { get { return this._http; } }
+
+    /// GET `path` and deserialize the body as `T`.
+    ///
+    /// Callers need an explicit cast on the result — z42 does not substitute a
+    /// generic method's return type across a zpkg boundary yet, so
+    /// `(T)api.Get<T>(...)`. See docs/design/language-surface.md.
+    public T Get<T>(string path) {
+        HttpResponse r = this._http.Get(this._baseUrl + path);
+        ApiClient.EnsureSuccess(r, "GET", path);
+        return JsonSerializer.Deserialize<T>(r.BodyAsString());
+    }
+
+    /// POST `body` as JSON to `path` and deserialize the reply as `TOut`.
+    public TOut Post<TIn, TOut>(string path, TIn body) {
+        string json = JsonSerializer.Serialize<TIn>(body);
+        HttpResponse r = this._http.PostString(this._baseUrl + path, json, "application/json");
+        ApiClient.EnsureSuccess(r, "POST", path);
+        return JsonSerializer.Deserialize<TOut>(r.BodyAsString());
+    }
+
+    /// GET `path` and return the body untouched — for endpoints that are not
+    /// JSON, and for callers that want to parse it themselves.
+    public string GetString(string path) {
+        HttpResponse r = this._http.Get(this._baseUrl + path);
+        ApiClient.EnsureSuccess(r, "GET", path);
+        return r.BodyAsString();
+    }
+
+    /// A non-2xx reply is an exception, not a return value: a typed client
+    /// promised a `T`, and there is no `T` to hand back.
+    private static void EnsureSuccess(HttpResponse r, string verb, string path) {
+        if (!r.IsSuccess())
+            throw new InvalidOperationException(
+                verb + " " + path + " failed with " + r.StatusCode.ToString());
+    }
+}

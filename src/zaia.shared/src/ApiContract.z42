@@ -1,0 +1,26 @@
+namespace Zaia.Shared;
+
+using Std;
+
+/// Marker base for an endpoint's shared declaration.
+///
+/// A contract is a class both ends compile against. It declares the verb, the
+/// path, and the payload types as **nested types**, so one `using` brings the
+/// whole endpoint into scope and a renamed field breaks both ends at compile
+/// time rather than at 3am:
+///
+///     public class GetUser : ApiContract {
+///         public static string Verb = HttpVerb.Get;
+///         public static string Path = "/api/users/{id}";
+///         public class Response { public string Id; public string Name; }
+///     }
+///
+///     // server                                  // client
+///     app.MapGet(GetUser.Path, handler);         api.Get<GetUser.Response>("/api/users/" + id);
+///
+/// Verb and path are `static` fields rather than abstract members because z42
+/// has no static abstract interface members: there is no way to require a
+/// subclass to declare them, so the convention is enforced by review and by
+/// the fact that omitting one fails to compile at the use site.
+public abstract class ApiContract {
+}

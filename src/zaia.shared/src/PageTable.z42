@@ -1,0 +1,95 @@
+namespace Zaia.Shared;
+
+using Std;
+using Std.Collections;
+using Zaia.Core;
+using Zaia.Ui;
+
+/// Builds the component for one route, given what the route captured.
+///
+/// A nominal interface rather than a `Func<RouteMatch, Component>` so a page
+/// can carry construction dependencies as fields — which is what a real page
+/// needs, since a factory usually has to hand its component a store or a
+/// client.
+public interface IPageFactory {
+    Component Create(RouteMatch match);
+}
+
+/// One entry: a path template and what to build when it matches.
+public class PageRoute {
+    public RoutePattern Pattern;
+    public IPageFactory Factory;
+
+    public PageRoute(string path, IPageFactory factory) {
+        this.Pattern = new RoutePattern(path);
+        this.Factory = factory;
+    }
+}
+
+/// The result of resolving a path against the table.
+public class PageMatch {
+    public bool Found;
+    public Component Page;
+    public RouteMatch Match;
+
+    public PageMatch(bool found, Component page, RouteMatch match) {
+        this.Found = found;
+        this.Page  = page;
+        this.Match = match;
+    }
+}
+
+/// **The isomorphic route table** — the single reason server and client agree
+/// on what a URL means.
+///
+/// The server resolves an incoming request against this table and renders the
+/// resulting component to HTML. The browser resolves a history entry against
+/// *the same table* and mounts the resulting component. One declaration, two
+/// consumers, and no way for them to drift:
+///
+///     PageTable pages = new PageTable()
+///         .Add("/",            new HomeFactory())
+///         .Add("/docs/{slug}", new DocFactory(store));
+///
+///     // server:  PageMatch m = pages.Resolve(ctx.Path);
+///     //          if (m.Found) ctx.Html(200, Ssr.Render(m.Page));
+///     // browser: Router.Start(pages, "#app");
+///
+/// This is the piece the framework exists to make possible. A server-rendered
+/// page and its client takeover are the same component, built by the same
+/// factory, from the same captures — so hydration is not a second
+/// implementation that has to be kept in sync.
+///
+/// Resolution is first-match-wins in declaration order: declare specific
+/// routes before general ones.
+public class PageTable {
+    private readonly List<PageRoute> _routes;
+
+    public PageTable() {
+        this._routes = new List<PageRoute>();
+    }
+
+    public PageTable Add(string path, IPageFactory factory) {
+        this._routes.Add(new PageRoute(path, factory));
+        return this;
+    }
+
+    /// Resolve `path` (no query string) to a built component.
+    /// `PageMatch.Found` is false when nothing matched — the caller decides
+    /// whether that is a 404 page or a redirect.
+    public PageMatch Resolve(string path) {
+        int i = 0;
+        while (i < this._routes.Count) {
+            PageRoute r = this._routes[i];
+            RouteMatch m = r.Pattern.Match(path);
+            if (m.Matched) {
+                IPageFactory f = r.Factory;
+                return new PageMatch(true, f.Create(m), m);
+            }
+            i = i + 1;
+        }
+        return new PageMatch(false, null, RouteMatch.Miss());
+    }
+
+    public int Count { get { return this._routes.Count; } }
+}

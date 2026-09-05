@@ -1,0 +1,16 @@
+[project]
+name        = "zaia.app"
+kind        = "lib"
+version     = "0.1.0"
+license     = "MIT"
+description = "Assemble: the composition root that picks a backend, wires the change loop, and owns lifetime."
+
+[dependencies]
+"zaia.core"     = "0.1.0"
+"zaia.ui"       = "0.1.0"
+"zaia.renderer" = "0.1.0"
+"zaia.web"      = "0.1.0"
+"zaia.shared"   = "0.1.0"
+
+[sources]
+include = ["src/**/*.z42"]

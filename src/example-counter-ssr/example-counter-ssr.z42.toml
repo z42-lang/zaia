@@ -1,0 +1,14 @@
+[project]
+name        = "example-counter-ssr"
+kind        = "exe"
+entry       = "Example.CounterSsr.Main"
+version     = "0.1.0"
+license     = "MIT"
+description = "Renders a stateful component to an HTML string through the HtmlBackend — no browser involved."
+
+[dependencies]
+"zaia.ui"       = "0.1.0"
+"zaia.renderer" = "0.1.0"
+
+[sources]
+include = ["src/**/*.z42"]

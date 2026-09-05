@@ -1,0 +1,90 @@
+namespace Zaia.App;
+
+using Std;
+using Zaia.Ui;
+using Zaia.Renderer;
+using Zaia.Web;
+
+/// The composition root: the one place that knows all three client layers.
+///
+/// `zaia.ui` describes and does not know a renderer exists. `zaia.renderer`
+/// renders and does not know where its tree comes from or when to run again.
+/// Neither can close the loop between them, and neither should. `App` closes
+/// it: it picks a backend, mounts the root component through a `Renderer`, and
+/// subscribes itself to `UiDispatch` so a `State.Set` anywhere re-renders.
+///
+///     void Main() { App.Mount("#app", new Counter()); }
+///
+/// `App` implements `IChangeListener` itself rather than registering a lambda —
+/// the subscription is the app's identity, not an anonymous callback, and it
+/// must be removable on teardown.
+public class App : IChangeListener {
+    private readonly Renderer _renderer;
+    private readonly Component _root;
+    private readonly string _selector;
+    private bool _mounted;
+
+    /// Re-entrancy guard. A handler that sets state during a render would
+    /// otherwise re-enter `OnChange` and render inside a render.
+    private bool _rendering;
+
+    private App(Renderer renderer, Component root, string selector) {
+        this._renderer  = renderer;
+        this._root      = root;
+        this._selector  = selector;
+        this._mounted   = false;
+        this._rendering = false;
+    }
+
+    /// Mount `root` at `selector` in the browser. The common case.
+    public static App Mount(string selector, Component root) {
+        return App.MountWith(new DomBackend(), selector, root);
+    }
+
+    /// Mount through an explicit backend — a test backend, or `HtmlBackend`
+    /// to drive the same reactive loop with no browser. This is the seam that
+    /// makes the client layers testable off-host.
+    public static App MountWith(IRenderBackend backend, string selector, Component root) {
+        App app = new App(new Renderer(backend), root, selector);
+        app.Start();
+        return app;
+    }
+
+    private void Start() {
+        this._renderer.Mount(this._selector, this._root.Render());
+        this._mounted = true;
+        UiDispatch.Subscribe(this);
+        this._root.OnMount();
+    }
+
+    /// The reactive loop's body: re-describe, re-render.
+    ///
+    /// Synchronous and un-batched — N state writes in one handler cost N
+    /// renders. Coalescing belongs here when it is needed (this is the only
+    /// place that can see the whole loop), and it needs a scheduler the VM does
+    /// not have yet.
+    public void OnChange() {
+        if (!this._mounted) return;
+        if (this._rendering) return;
+        this._rendering = true;
+        try {
+            this._renderer.Update(this._root.Render());
+        } finally {
+            this._rendering = false;
+        }
+    }
+
+    /// Detach: stop listening, unmount the component, clear the host.
+    /// Idempotent.
+    public void Dispose() {
+        if (!this._mounted) return;
+        this._mounted = false;
+        UiDispatch.Unsubscribe(this);
+        this._root.OnUnmount();
+        this._renderer.Backend.Clear(this._renderer.RootHandle);
+    }
+
+    /// The renderer, for a caller that needs to read the backend back —
+    /// `HtmlBackend.ToHtml()` after a headless mount, most usefully.
+    public Renderer Renderer { get { return this._renderer; } }
+}

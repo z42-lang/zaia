@@ -1,0 +1,103 @@
+namespace Zaia.Core;
+
+using Std;
+using Std.Collections;
+
+/// The outcome of matching a concrete path against a `RoutePattern`.
+///
+/// `Matched` is false for a miss; the parameter bag is only meaningful when
+/// it is true.
+public class RouteMatch {
+    public bool Matched;
+    public Dictionary<string, string> Params;
+
+    public RouteMatch(bool matched) {
+        this.Matched = matched;
+        this.Params  = new Dictionary<string, string>();
+    }
+
+    public static RouteMatch Miss() => new RouteMatch(false);
+
+    /// The captured value for `{name}`, or "" when the segment is absent.
+    public string Get(string name) => this.Params.GetValueOrDefault(name, "");
+}
+
+/// A path template with `{name}` capture segments — `/users/{id}/posts/{slug}`.
+///
+/// This is the single routing primitive in zaia, and it is deliberately in
+/// `zaia.core` rather than in the server: the **same** pattern object routes
+/// an HTTP request on the server and a history entry in the browser, which is
+/// what lets one page table drive both. See docs/design/routing.md.
+///
+/// Matching is segment-wise and exact in arity. A trailing `{name*}` catch-all
+/// is reserved but not yet accepted.
+public class RoutePattern {
+    /// The template as written, e.g. "/users/{id}".
+    public string Template;
+
+    private readonly string[] _segments;
+
+    public RoutePattern(string template) {
+        this.Template  = template;
+        this._segments = RoutePattern.Split(template);
+    }
+
+    /// Match `path` (query string already stripped) against this template.
+    public RouteMatch Match(string path) {
+        string[] parts = RoutePattern.Split(path);
+        if (parts.Length != this._segments.Length) return RouteMatch.Miss();
+
+        RouteMatch m = new RouteMatch(true);
+        int i = 0;
+        while (i < this._segments.Length) {
+            string seg = this._segments[i];
+            if (RoutePattern.IsCapture(seg)) {
+                m.Params.Set(seg.Substring(1, seg.Length - 2), parts[i]);
+            } else if (seg != parts[i]) {
+                return RouteMatch.Miss();
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    /// Fill the template's captures from `values` — the inverse of `Match`,
+    /// used to build links without string-concatenating paths by hand.
+    public string Build(Dictionary<string, string> values) {
+        string outPath = "";
+        int i = 0;
+        while (i < this._segments.Length) {
+            string seg = this._segments[i];
+            if (RoutePattern.IsCapture(seg)) {
+                outPath = outPath + "/" + values.GetValueOrDefault(seg.Substring(1, seg.Length - 2), "");
+            } else {
+                outPath = outPath + "/" + seg;
+            }
+            i = i + 1;
+        }
+        return outPath.Length == 0 ? "/" : outPath;
+    }
+
+    /// True when a segment is a `{name}` capture.
+    private static bool IsCapture(string seg) {
+        return seg.Length > 2 && seg.StartsWith("{") && seg.EndsWith("}");
+    }
+
+    /// Split a path into non-empty segments. "/" → []; "/a/b/" → ["a", "b"].
+    private static string[] Split(string path) {
+        List<string> segs = new List<string>();
+        int i = 0;
+        string cur = "";
+        while (i < path.Length) {
+            char c = path.CharAt(i);
+            if (c == '/') {
+                if (cur.Length > 0) { segs.Add(cur); cur = ""; }
+            } else {
+                cur = cur + c;
+            }
+            i = i + 1;
+        }
+        if (cur.Length > 0) segs.Add(cur);
+        return segs.ToArray();
+    }
+}
